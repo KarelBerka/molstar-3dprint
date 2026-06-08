@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mol* 3D‑Print Export Demo</title>
+<script type="module">
+import { MolstarPlugin } from '../mol-plugin/molstar-plugin';
+import { ViewerApp } from '../apps/viewer/app';
+import { PluginSpec } from '../mol-plugin/spec';
+import { ThreeDPrintExport } from '../extensions/3dprint-export';
+
+(async () => {
+    const plugin = await MolstarPlugin.create({
+        layoutState: { hideControls: false },
+        components: {
+            behavior: [
+                // Register the 3D‑print export extension
+                PluginSpec.Behavior(ThreeDPrintExport)
+            ]
+        }
+    });
+    // Load a test structure (example PDB)
+    await plugin.build().loadPdb('1bna');
+    // The Export menu now includes a "Export Geometry" entry which supports STL/OBJ/GLB/USDZ.
+})();
+</script>
+</head>
+<body>
+<h1>Mol* 3D‑Print Export Demo</h1>
+<div id="app"></div>
+</body>
+</html>

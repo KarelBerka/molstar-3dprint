@@ -31,7 +31,20 @@ import { MVSData } from '../../extensions/mvs/mvs-data';
 import * as MVSUtil from '../../extensions/mvs/util';
 import { KinemageExtension } from '../../extensions/kinemage/behavior';
 
+import { ThreeDPrintExport } from '../../extensions/3dprint-export';
+
 export const ExtensionMap = {
+    // Mol* built-in extensions
+    'mvs': PluginSpec.Behavior(MolViewSpec),
+    'backgrounds': PluginSpec.Behavior(Backgrounds),
+    'debug-helpers': PluginSpec.Behavior(DebugHelpers),
+    'model-export': PluginSpec.Behavior(ModelExport),
+    'mp4-export': PluginSpec.Behavior(Mp4Export),
+    'geo-export': PluginSpec.Behavior(GeometryExport),
+    '3dprint-export': PluginSpec.Behavior(ThreeDPrintExport),
+    'zenodo-import': PluginSpec.Behavior(ZenodoImport),
+    'wwpdb-chemical-component-dictionary': PluginSpec.Behavior(wwPDBChemicalComponentDictionary),
+    'kinemage': PluginSpec.Behavior(KinemageExtension),
     // Mol* built-in extensions
     'mvs': PluginSpec.Behavior(MolViewSpec),
     'backgrounds': PluginSpec.Behavior(Backgrounds),
