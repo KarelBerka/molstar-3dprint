@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3DP‑JMOL – Mol* Viewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Outfit:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/css/style.css" />
+  <!-- Mol* bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/molstar@latest/build/molstar.js"></script>
+  <!-- Three.js core -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.min.js"></script>
+  <!-- Exporter modules -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.0/examples/js/exporters/STLExporter.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.0/examples/js/exporters/OBJExporter.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.0/examples/js/exporters/GLTFExporter.js"></script>
+</head>
+<body>
+  <header class="header">
+    <h1 class="title">3DP‑JMOL – Mol* Viewer</h1>
+    <p class="subtitle">Upload a molecular file, visualise it, and export printable 3‑D meshes (STL, OBJ, GLB).</p>
+  </header>
+
+  <main class="main">
+    <section class="upload-panel glass">
+      <input type="file" id="file-input" accept=".pdb,.cif,.sdf,.mol2,.xyz" />
+      <p class="note">Supported formats: PDB, mmCIF, SDF, MOL2, XYZ (max 100 MB)</p>
+    </section>
+
+    <section id="viewer" class="viewer glass"></section>
+
+    <section class="export-panel glass" style="display:none;">
+      <button id="export-stl" class="export-btn" disabled>Download STL</button>
+      <button id="export-obj" class="export-btn" disabled>Download OBJ</button>
+      <button id="export-glb" class="export-btn" disabled>Download GLB</button>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>© 2026 3DP‑JMOL – Built with <a href="https://molstar.org" target="_blank">Mol*</a></p>
+  </footer>
+
+  <script src="assets/js/viewer.js"></script>
+</body>
+</html>
