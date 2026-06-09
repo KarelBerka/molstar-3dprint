@@ -11,6 +11,10 @@
   <link rel="stylesheet" href="assets/css/style.css" />
   <!-- Mol* CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/molstar@latest/build/viewer/molstar.css" />
+  <!-- Mol* script (global) -->
+  <script src="https://cdn.jsdelivr.net/npm/molstar@latest/build/viewer/molstar.js"></script>
+  <!-- Simple favicon to avoid 404 -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'></svg>" />
 </head>
 <body>
   <header class="header">
@@ -25,8 +29,10 @@
     </section>
 
     <section id="viewer" class="viewer glass"></section>
-
-    <section class="export-panel glass" style="display:none;">
+<section class="selection-panel glass" style="display:none;">
+  <p>Select parts for export (future feature)</p>
+</section>
+<section class="export-panel glass" style="display:none;">
       <button id="export-stl" class="export-btn" disabled>Download STL</button>
       <button id="export-obj" class="export-btn" disabled>Download OBJ</button>
       <button id="export-glb" class="export-btn" disabled>Download GLB</button>
@@ -37,7 +43,7 @@
     <p>© 2026 3DP‑JMOL – Built with <a href="https://molstar.org" target="_blank">Mol*</a></p>
   </footer>
 
-  <!-- Load viewer as ES module -->
+  <!-- Viewer logic as ES module (imports Three.js only) -->
   <script type="module" src="assets/js/viewer.js"></script>
 </body>
 </html>
