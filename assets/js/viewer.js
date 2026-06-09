@@ -1,5 +1,10 @@
-// viewer.js – Handles file upload, Mol* loading, mesh generation, and export
-// Assumes global Molstar (from CDN) and THREE (from CDN)
+// viewer.js – ES module version
+// Import Mol* Viewer and Three.js (module builds)
+import { Viewer } from 'https://cdn.jsdelivr.net/npm/molstar@latest/build/viewer/molstar.js';
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.module.js';
+import { STLExporter } from 'https://cdn.jsdelivr.net/npm/three@0.152.0/examples/jsm/exporters/STLExporter.js';
+import { OBJExporter } from 'https://cdn.jsdelivr.net/npm/three@0.152.0/examples/jsm/exporters/OBJExporter.js';
+import { GLTFExporter } from 'https://cdn.jsdelivr.net/npm/three@0.152.0/examples/jsm/exporters/GLTFExporter.js';
 
 (function () {
   const fileInput = document.getElementById('file-input');
@@ -10,14 +15,14 @@
 
   // Initialize Mol* viewer
   const viewerDiv = document.getElementById('viewer');
-  const viewer = new Molstar.Viewer(viewerDiv, {
+  const viewer = new Viewer(viewerDiv, {
     layoutIsExpanded: false,
     hideControls: false,
-    // Use a minimal UI to keep design clean
+    // Minimal UI for a clean look
     controls: { default: true },
   });
 
-  // Helper: map extension to Mol* format name
+  // Map file extensions to Mol* format identifiers
   const formatMap = {
     pdb: 'pdb',
     cif: 'mmcif',
@@ -27,8 +32,7 @@
     xyz: 'xyz'
   };
 
-  // File size limit – 100 MB
-  const MAX_SIZE = 100 * 1024 * 1024;
+  const MAX_SIZE = 100 * 1024 * 1024; // 100 MB
 
   fileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -44,9 +48,7 @@
       return;
     }
     const arrayBuffer = await file.arrayBuffer();
-    // Clear any previous structure
     await viewer.clear();
-    // Load the structure from binary data
     try {
       await viewer.loadStructureFromData(arrayBuffer, { ext: format });
     } catch (err) {
@@ -54,62 +56,25 @@
       alert('Failed to load structure.');
       return;
     }
-    // Center and orient the model for printable view
+    // Center and orient for printing
     try {
-      // Focus camera on the model and reset orientation
       await viewer.plugin.commands.execute('camera.reset', {});
       await viewer.plugin.commands.execute('camera.focus', {});
-    } catch (e) { console.warn('Camera commands unavailable', e); }
-    // Enable export UI
+    } catch (e) { console.warn('Camera command error', e); }
     exportPanel.style.display = 'flex';
-    btnSTL.disabled = false;
-    btnOBJ.disabled = false;
-    btnGLB.disabled = false;
+    btnSTL.disabled = btnOBJ.disabled = btnGLB.disabled = false;
   });
 
-  // Helper to collect meshes from Mol* scene
   function collectExportMesh() {
     const scene = viewer.plugin.canvas3d.scene;
     const group = new THREE.Group();
     scene.traverse((obj) => {
       if (obj.isMesh) {
-        // Clone geometry and material to avoid reference issues
-        const clone = obj.clone();
-        group.add(clone);
+        const cloned = obj.clone();
+        group.add(cloned);
       }
     });
     return group;
-  }
-
-  // Export functions
-  async function exportSTL() {
-    const mesh = collectExportMesh();
-    const exporter = new THREE.STLExporter();
-    const data = exporter.parse(mesh);
-    const blob = new Blob([data], { type: 'application/vnd.ms-pki.stl' });
-    downloadBlob(blob, 'model.stl');
-  }
-
-  async function exportOBJ() {
-    const mesh = collectExportMesh();
-    const exporter = new THREE.OBJExporter();
-    const data = exporter.parse(mesh);
-    const blob = new Blob([data], { type: 'text/plain' });
-    downloadBlob(blob, 'model.obj');
-  }
-
-  async function exportGLB() {
-    const mesh = collectExportMesh();
-    const exporter = new THREE.GLTFExporter();
-    exporter.parse(
-      mesh,
-      (result) => {
-        const output = JSON.stringify(result);
-        const blob = new Blob([output], { type: 'model/gltf+json' });
-        downloadBlob(blob, 'model.glb');
-      },
-      { binary: true }
-    );
   }
 
   function downloadBlob(blob, name) {
@@ -126,7 +91,35 @@
     }, 100);
   }
 
-  // Bind export buttons
+  async function exportSTL() {
+    const mesh = collectExportMesh();
+    const exporter = new STLExporter();
+    const data = exporter.parse(mesh);
+    const blob = new Blob([data], { type: 'application/vnd.ms-pki.stl' });
+    downloadBlob(blob, 'model.stl');
+  }
+
+  async function exportOBJ() {
+    const mesh = collectExportMesh();
+    const exporter = new OBJExporter();
+    const data = exporter.parse(mesh);
+    const blob = new Blob([data], { type: 'text/plain' });
+    downloadBlob(blob, 'model.obj');
+  }
+
+  async function exportGLB() {
+    const mesh = collectExportMesh();
+    const exporter = new GLTFExporter();
+    exporter.parse(
+      mesh,
+      (result) => {
+        const blob = new Blob([result], { type: 'model/gltf-binary' });
+        downloadBlob(blob, 'model.glb');
+      },
+      { binary: true }
+    );
+  }
+
   btnSTL.addEventListener('click', exportSTL);
   btnOBJ.addEventListener('click', exportOBJ);
   btnGLB.addEventListener('click', exportGLB);
