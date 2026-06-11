@@ -1,210 +1,67 @@
-[![License](http://img.shields.io/badge/license-MIT-blue.svg?style=flat)](./LICENSE)
-[![npm version](https://badge.fury.io/js/molstar.svg)](https://www.npmjs.com/package/molstar)
-[![Build](https://github.com/molstar/molstar/actions/workflows/node.yml/badge.svg)](https://github.com/molstar/molstar/actions/workflows/node.yml)
-[![Gitter](https://badges.gitter.im/molstar/Lobby.svg)](https://gitter.im/molstar/Lobby)
+# 3DP-Mol* – Web-Based 3D-Printing Planning for Molecules
 
-# Mol*
+**3DP-Mol\*** is an interactive tool designed for structural biologists, educators, and makers to prepare macromolecular structures for 3D printing directly in their web browser. 
 
-The goal of **Mol\*** (*/'mol-star/*) is to provide a technology stack that serves as a basis for the next-generation data delivery and analysis tools for (not only) macromolecular structure data. Mol* development was jointly initiated by PDBe and RCSB PDB to combine and build on the strengths of [LiteMol](https://litemol.org) (developed by PDBe) and [NGL](https://nglviewer.org) (developed by RCSB PDB) viewers.
+This repository is a customized fork of **[Mol\*](https://github.com/molstar/molstar)**, integrating the automated printing planning algorithms originally developed in the JSmol/Jmol-based **[3DP-Jmol](https://github.com/mariusmihasan/3DP-Jmol)** tool.
 
-When using Mol*, please cite:
+🚀 **[Live Demo Page](https://karelberka.github.io/molstar-3dprint/)**
 
-David Sehnal, Sebastian Bittrich, Mandar Deshpande, Radka Svobodová, Karel Berka, Václav Bazgier, Sameer Velankar, Stephen K Burley, Jaroslav Koča, Alexander S Rose: [Mol* Viewer: modern web app for 3D visualization and analysis of large biomolecular structures](https://doi.org/10.1093/nar/gkab314), *Nucleic Acids Research*, 2021; https://doi.org/10.1093/nar/gkab314.
+---
 
-### Protein Data Bank Integrations
+## Features
 
-- The [pdbe-molstar](https://github.com/molstar/pdbe-molstar) library is the Mol* implementation used by EMBL-EBI data resources such as [PDBe](https://pdbe.org/), [PDBe-KB](https://pdbe-kb.org/) and [AlphaFold DB](https://alphafold.ebi.ac.uk/). This implementation can be used as a JS plugin and a Web component and supports property/attribute-based easy customisation. It provides helper methods to facilitate programmatic interactions between the web application and the 3D viewer. It also provides a superposition view for overlaying all the observed ligand molecules on representative protein conformations.
+- **Dynamic Print Sizing**: Specify target sizes in millimeters or define a scale factor; both input fields are fully interactive and update one another in real time.
+- **Thick Presets**: One-click durable representations (Spacefill, Ball & Stick, Cartoon, and Surface) configured to generate print-stable meshes that resist delamination and breakage.
+- **Support Struts Engine**: Automatically calculates internal support struts for protein and nucleic acid backbones, as well as multi-point stabilization struts for small molecules/ligands.
+- **Pre-Scaled Exports**: Exports STL, OBJ, GLB, and USDZ files with vertices already scaled to the chosen physical size in millimeters.
 
-- [rcsb-molstar](https://github.com/molstar/rcsb-molstar) is the Mol* plugin used by [RCSB PDB](https://www.rcsb.org). The project provides additional presets for the visualization of structure alignments and structure motifs such as ligand binding sites. Furthermore, [rcsb-molstar](https://github.com/molstar/rcsb-molstar) allows to interactively add or hide of (parts of) chains, as seen in the [3D Protein Feature View](https://www.rcsb.org/3d-sequence/4hhb).
+---
 
+## Changes to Original Mol*
 
-## Project Structure Overview
+The following modifications were made to the core [Mol\*](https://molstar.org) project to support 3D-print planning:
 
-The core of Mol* consists of these modules (see under `src/`):
+### 1. 3D-Printing planning & Struts Engine (`src/extensions/3dprint-export/`)
+- **`struts.ts`**:
+  - Implements the backbone-to-backbone support strut calculation by checking Euclidean distances between sequential anchors (`CA` for proteins, `P` for DNA/RNA).
+  - Implements ligand stabilization using up to three polymer backbone anchor points to ensure small molecule ligands remain rigid during slicing and printing.
+  - Registers the state transformer `StrutsFromStructure` to render struts dynamically in the viewport as cylinders.
+- **`ui.tsx`**:
+  - Implements the "3D-Print Planning" React component.
+  - Manages dual, synchronized target size and scale factor input boxes.
+  - Updates the active scale factor globally in the plugin's `customState.printScaleFactor`.
 
-- `mol-task` Computation abstraction with progress tracking and cancellation support.
-- `mol-data` Collections (integer-based sets, interface to columns/tables, etc.)
-- `mol-math` Math related (loosely) algorithms and data structures.
-- `mol-io` Parsing library. Each format is parsed into an interface that corresponds to the data stored by it. Support for common coordinate, experimental/map, and annotation data formats.
-- `mol-model` Data structures and algorithms (such as querying) for representing molecular data (including coordinate, experimental/map, and annotation data).
-- `mol-model-formats` Data format parsers for `mol-model`.
-- `mol-model-props` Common "custom properties".
-- `mol-script` A scripting language for creating representations/scenes and querying (includes the [MolQL query language](https://molql.github.io)).
-- `mol-geo` Creating (molecular) geometries.
-- `mol-theme` Theming for structure, volume and shape representations.
-- `mol-repr` Molecular representations for structures, volumes and shapes.
-- `mol-gl` A wrapper around WebGL.
-- `mol-canvas3d` A low-level 3d view component. Uses `mol-geo` to generate geometries.
-- `mol-state` State representation tree with state saving and automatic updates.
-- `mol-plugin` Allow to define modular Mol* plugin instances utilizing `mol-state` and `mol-canvas3d`.
-- `mol-plugin-state` State transformations, builders, and managers.
-- `mol-plugin-ui` React-based user interface for the Mol* plugin. Some components of the UI are usable outside the main plugin and can be integrated into 3rd party solutions.
-- `mol-util` Useful things that do not fit elsewhere.
+### 2. Physical Scale Exporters (`src/extensions/geo-export/`)
+- Updated **`StlExporter`**, **`ObjExporter`**, **`GlbExporter`**, and **`UsdzExporter`** to accept a `scale` parameter in their constructors.
+- Applies the scale factor directly to the geometry matrices (`centerTransform`), scaling molecular coordinate vectors (normally in Ångström) to the selected physical size (in millimeters) directly in the exported files.
+- Modified `GeometryControls` to propagate the scale factor during the export task.
 
-Moreover, the project contains the implementation of `servers`, including
+### 3. Application Viewer Integration (`src/apps/viewer/`)
+- **`app.ts`**: Updated `exportGeometry` to pull the active scale factor from the plugin's custom state registry and feed it into the geometry exporter.
+- **`controls.tsx`**: Configured custom structure controls so that default panels (Source, Measurements, Components) start collapsed, while keeping the **3D-Print Planning** panel expanded.
+- **`extensions.ts`**: Registered our custom `ThreeDPrintExport` behavior.
 
-- `servers/model` A tool for accessing coordinate and annotation data of molecular structures.
-- `servers/volume` A tool for accessing volumetric experimental data related to molecular structures.
-- `servers/plugin-state` A basic server to store Mol* Plugin states.
+### 4. Direct Web Exporter Page Integration
+- Configured a split-screen webpage layout in `index.html` with a glassmorphism sidebar for files and downloads, leaving the remaining screen as a full-height viewport canvas.
+- Configured `assets/js/viewer.js` to initialize Mol* and enable direct STL, OBJ, and GLB geometry exports with correct physical scaling.
+- Configured `.gitignore` to track the custom built `build/viewer/molstar.js` and `build/viewer/molstar.css` files, allowing GitHub Pages to serve them.
 
-The project also contains performance tests (`perf-tests`), `examples`, and `cli` apps (CIF to BinaryCIF converter and JSON domain annotation to CIF converter).
+---
 
-## Previous Work
-This project builds on experience from previous solutions:
-- [LiteMol Suite](https://www.litemol.org)
-- [WebChemistry](https://webchem.ncbr.muni.cz)
-- [NGL Viewer](http://nglviewer.org)
-- [MMTF](http://mmtf.rcsb.org)
-- [MolQL](http://molql.org)
-- [PDB Component Library](https://www.ebi.ac.uk/pdbe/pdb-component-library/)
-- And many others (list will be continuously expanded).
+## Local Development & Building
 
-## Building & Running
+1. **Install dependencies**:
+   ```bash
+   npm install
+   ```
 
-### Build:
-    npm install
-    npm run build
+2. **Build the application**:
+   ```bash
+   npm run build:apps
+   ```
 
-### Build automatically on file save:
-    npm run watch
-
-If working on just the viewer, ``npm run watch-viewer`` will provide shorter compile times.
-
-### Build with debug mode enabled:
-    DEBUG=molstar npm run watch
-
-Debug/production mode in browsers can be turned on/off during runtime by calling ``setMolStarDebugMode(true/false, true/false)`` from the dev console.
-
-### Cleaning and forcing a full rebuild
-    npm run clean
-
-Wipes the `build` and `lib` directories and `.tsbuildinfo` files.
-
-    npm run rebuild
-
-Runs the cleanup script prior to building the project, forcing a full rebuild of the project.
-
-Use these commands to resolve occasional build failures which may arise after some dependency updates. Once done, `npm run build` should work again. Note that full rebuilds take more time to complete.
-
-### Develop with `esbuild`
-
-Experimental support for faster builds with `esbuild`
-- `npm run dev:all` - watch mode for all apps and examples
-- `npm run dev:viewer` - watch mode for viewer
-- `npm run dev:apps` - watch mode for all apps
-- `npm run dev:examples` - watch mode for all examples
-- `npm run dev -- -a <app name 1> <app name 2> -e <example name 1> ...` - watch mode for specified apps/examples. `-a`/`-e` with without any names will build everything.
-
-### Build for production:
-    NODE_ENV=production npm run build
-
-**Run**
-
-If not installed previously:
-
-    npm install -g http-server
-
-...or a similar solution.
-
-From the root of the project:
-
-    http-server -p PORT-NUMBER
-
-and navigate to `build/viewer`
-
-### Code generation
-**CIF schemas**
-
-    node ./lib/commonjs/cli/cifschema -mip ../../../../mol-data -o src/mol-io/reader/cif/schema/mmcif.ts -p mmCIF
-    node ./lib/commonjs/cli/cifschema -mip ../../../../mol-data -o src/mol-io/reader/cif/schema/ccd.ts -p CCD
-    node ./lib/commonjs/cli/cifschema -mip ../../../../mol-data -o src/mol-io/reader/cif/schema/bird.ts -p BIRD
-    node ./lib/commonjs/cli/cifschema -mip ../../../../mol-data -o src/mol-io/reader/cif/schema/cif-core.ts -p CifCore -aa
-
-**Lipid names**
-
-    node lib/commonjs/cli/lipid-params -o src/mol-model/structure/model/types/lipids.ts
-
-**Ion names**
-
-    node --max-old-space-size=8192 lib/commonjs/cli/chem-comp-dict/create-ions.js src/mol-model/structure/model/types/ions.ts
-
-**Saccharide names**
-
-    node --max-old-space-size=8192 lib/commonjs/cli/chem-comp-dict/create-saccharides.js src/mol-model/structure/model/types/saccharides.ts
-
-### Other scripts
-**Create chem comp bond table**
-
-    node --max-old-space-size=8192 lib/commonjs/cli/chem-comp-dict/create-table.js build/data/ccb.bcif -b
-
-**Test model server**
-
-    export NODE_PATH="lib"; node build/src/servers/model/test.js
-
-**State Transformer Docs**
-
-    export NODE_PATH="lib"; node build/state-docs
-
-**Convert any CIF to BinaryCIF (or vice versa)**
-
-    node lib/commonjs/servers/model/preprocess -i file.cif -ob file.bcif
-
-To see all available commands, use ``node lib/commonjs/servers/model/preprocess -h``.
-
-Or
-
-    node lib/commonjs/cli/cif2bcif
-
-E.g.
-
-    node lib/commonjs/cli/cif2bcif src.cif out.bcif.gz
-    node lib/commonjs/cli/cif2bcif src.bcif.gz out.cif
-
-## Development
-
-### Installation
-
-If node complains about a missing acorn peer dependency, run the following commands
-
-    npm update acorn --depth 20
-    npm dedupe
-
-### Editor
-
-To get syntax highlighting for shader files add the following to Visual Code's settings files and make sure relevant extensions are installed in the editor.
-
-    "files.associations": {
-        "*.glsl.ts": "glsl",
-        "*.frag.ts": "glsl",
-        "*.vert.ts": "glsl"
-    },
-
-## Publish
-
-### Prerelease
-    npm version prerelease # assumes the current version ends with '-dev.X'
-    npm publish --tag next
-
-### Release
-    npm version 0.X.0 # provide valid semver string
-    npm publish
-
-## Deploy
-To prepare apps and demos for https://molstar.org deploy, run:
-
-    npm run test
-    npm run deploy:local
-
-To commit these changes remotely to the `molstar/molstar.github.io` repo:
-
-    npm run deploy:remote
-
-## Contributing
-Just open an issue or make a pull request. All contributions are welcome.
-
-## Funding
-Funding sources include but are not limited to:
-* [RCSB PDB](https://www.rcsb.org) funding by a grant [DBI-1338415; PI: SK Burley] from the NSF, the NIH, and the US DoE
-* [PDBe, EMBL-EBI](https://pdbe.org)
-* [CEITEC](https://www.ceitec.eu/)
-* [EntosAI](https://www.entos.ai)
+3. **Run a local server**:
+   ```bash
+   npm run serve
+   ```
+   Navigate to `http://localhost:1338` in your browser.

@@ -1,4 +1,8 @@
-build/
+build/*
+!build/viewer/
+build/viewer/*
+!build/viewer/molstar.js
+!build/viewer/molstar.css
 deploy/
 lib/
 docs/site/
