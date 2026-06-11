@@ -149,7 +149,7 @@ export class ThreeDPrintPlanningUI extends CollapsableControls<{}, ThreeDPrintUI
                     };
                 }
 
-                reprUpdate.to(cell.transform.ref).update({
+                const reprProps: any = {
                     type: {
                         name: newTypeName,
                         params: newTypeParams
@@ -158,7 +158,14 @@ export class ThreeDPrintPlanningUI extends CollapsableControls<{}, ThreeDPrintUI
                         name: 'element-symbol',
                         params: {}
                     }
-                });
+                };
+                if (presetType === 'surface') {
+                    reprProps.sizeTheme = {
+                        name: 'physical',
+                        params: {}
+                    };
+                }
+                reprUpdate.to(cell.transform.ref).update(reprProps);
             }
             await reprUpdate.commit();
 
