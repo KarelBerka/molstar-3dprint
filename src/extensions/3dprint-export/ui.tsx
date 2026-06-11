@@ -292,7 +292,7 @@ export class ThreeDPrintPlanningUI extends CollapsableControls<{}, ThreeDPrintUI
             </div>
 
             <div className='msp-control-row' style={{ padding: '4px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <span className='msp-control-label'>Scale Factor</span>
+                <span className='msp-control-label'>Scale Factor (mm/Å)</span>
                 <input
                     type='number'
                     step='any'
