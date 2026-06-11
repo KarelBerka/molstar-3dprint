@@ -61,73 +61,107 @@ export class ThreeDPrintPlanningUI extends CollapsableControls<{}, ThreeDPrintUI
             const structures = this.plugin.managers.structure.hierarchy.current.structures;
             if (structures.length === 0) return;
 
-            if (presetType === 'spacefill') {
-                await this.plugin.managers.structure.component.applyPreset(structures, PresetStructureRepresentations.illustrative);
+            // 1. Apply polymer-and-ligand preset as the base
+            await this.plugin.managers.structure.component.applyPreset(structures, PresetStructureRepresentations['polymer-and-ligand']);
 
-                const cells = this.plugin.state.data.select(StateSelection.Generators.ofTransformer(StateTransforms.Representation.StructureRepresentation3D));
-                const update = this.plugin.state.data.build();
-                for (const cell of cells) {
-                    const params = cell.transform.params;
-                    if (params?.type?.name === 'spacefill' && params.type.params) {
-                        update.to(cell.transform.ref).update({
-                            type: {
-                                name: 'spacefill',
-                                params: {
-                                    ...params.type.params,
-                                    sizeFactor: 1.6
-                                }
-                            }
-                        });
-                    }
-                }
-                await update.commit();
-            } else if (presetType === 'ball-and-stick') {
-                await this.plugin.managers.structure.component.applyPreset(structures, PresetStructureRepresentations['polymer-and-ligand']);
+            // 2. Find and delete water components and branched SNFG 3D representations
+            const waterComponents = this.plugin.state.data.select(
+                StateSelection.Generators.ofTransformer(StateTransforms.Model.StructureComponent)
+            ).filter(cell => {
+                const type = cell.transform.params?.type;
+                return type?.name === 'static' && type?.params === 'water';
+            });
 
-                const cells = this.plugin.state.data.select(StateSelection.Generators.ofTransformer(StateTransforms.Representation.StructureRepresentation3D));
-                const update = this.plugin.state.data.build();
-                for (const cell of cells) {
-                    const params = cell.transform.params;
-                    if (params?.type?.name === 'ball-and-stick' && params.type.params) {
-                        update.to(cell.transform.ref).update({
-                            type: {
-                                name: 'ball-and-stick',
-                                params: {
-                                    ...params.type.params,
-                                    sizeFactor: 1.2,
-                                    bondScale: 1.0,
-                                    bondRadius: 0.45
-                                }
-                            }
-                        });
-                    }
-                }
-                await update.commit();
-            } else if (presetType === 'cartoon') {
-                await this.plugin.managers.structure.component.applyPreset(structures, PresetStructureRepresentations['polymer-cartoon']);
+            const snfgRepresentations = this.plugin.state.data.select(
+                StateSelection.Generators.ofTransformer(StateTransforms.Representation.StructureRepresentation3D)
+            ).filter(cell => cell.transform.tags?.includes('branched-snfg-3d'));
 
-                const cells = this.plugin.state.data.select(StateSelection.Generators.ofTransformer(StateTransforms.Representation.StructureRepresentation3D));
-                const update = this.plugin.state.data.build();
-                for (const cell of cells) {
-                    const params = cell.transform.params;
-                    if (params?.type?.name === 'cartoon' && params.type.params) {
-                        update.to(cell.transform.ref).update({
-                            type: {
-                                name: 'cartoon',
-                                params: {
-                                    ...params.type.params,
-                                    sizeFactor: 0.6,
-                                    aspectRatio: 1.8,
-                                    tubularHelices: true
-                                }
-                            }
-                        });
-                    }
-                }
-                await update.commit();
-            } else if (presetType === 'surface') {
-                await this.plugin.managers.structure.component.applyPreset(structures, PresetStructureRepresentations['molecular-surface']);
+            const deleteUpdate = this.plugin.state.data.build();
+            for (const cell of waterComponents) {
+                deleteUpdate.delete(cell.transform.ref);
             }
+            for (const cell of snfgRepresentations) {
+                deleteUpdate.delete(cell.transform.ref);
+            }
+            await deleteUpdate.commit();
+
+            // 3. Customize remaining representations
+            const reprCells = this.plugin.state.data.select(
+                StateSelection.Generators.ofTransformer(StateTransforms.Representation.StructureRepresentation3D)
+            );
+
+            const reprUpdate = this.plugin.state.data.build();
+            for (const cell of reprCells) {
+                const params = cell.transform.params;
+                if (!params) continue;
+
+                const parentCell = this.plugin.state.data.cells.get(cell.transform.parent);
+                const parentType = parentCell?.transform.params?.type;
+                const isPolymer = parentType?.name === 'static' && parentType?.params === 'polymer';
+                const isCoarse = parentType?.name === 'static' && parentType?.params === 'coarse';
+
+                let newTypeName = params.type.name;
+                let newTypeParams = { ...params.type.params };
+
+                if (presetType === 'spacefill') {
+                    newTypeName = 'spacefill';
+                    newTypeParams = {
+                        ...newTypeParams,
+                        sizeFactor: 1.6
+                    };
+                } else if (presetType === 'ball-and-stick') {
+                    newTypeName = 'ball-and-stick';
+                    newTypeParams = {
+                        ...newTypeParams,
+                        sizeFactor: 1.2,
+                        bondScale: 1.0,
+                        bondRadius: 0.45
+                    };
+                } else if (presetType === 'cartoon') {
+                    if (isPolymer) {
+                        newTypeName = 'cartoon';
+                        newTypeParams = {
+                            ...newTypeParams,
+                            sizeFactor: 0.6,
+                            aspectRatio: 1.8,
+                            tubularHelices: true
+                        };
+                    } else if (isCoarse) {
+                        newTypeName = 'spacefill';
+                        newTypeParams = {
+                            ...newTypeParams,
+                            sizeFactor: 1.6
+                        };
+                    } else {
+                        // Ligand, ion, lipid, branched-ball-and-stick -> durable ball-and-stick
+                        newTypeName = 'ball-and-stick';
+                        newTypeParams = {
+                            ...newTypeParams,
+                            sizeFactor: 1.2,
+                            bondScale: 1.0,
+                            bondRadius: 0.45
+                        };
+                    }
+                } else if (presetType === 'surface') {
+                    newTypeName = 'molecular-surface';
+                    newTypeParams = {
+                        ...newTypeParams
+                    };
+                }
+
+                reprUpdate.to(cell.transform.ref).update({
+                    type: {
+                        name: newTypeName,
+                        params: newTypeParams
+                    },
+                    colorTheme: {
+                        name: 'element-symbol',
+                        params: {}
+                    }
+                });
+            }
+            await reprUpdate.commit();
+
         } catch (e) {
             console.error('Failed to apply thick print preset', e);
         } finally {
