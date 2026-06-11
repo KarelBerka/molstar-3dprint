@@ -37,6 +37,23 @@
       <p class="note">Formats: PDB, mmCIF, BinaryCIF, SDF, MOL2, XYZ (max 100 MB)</p>
     </section>
 
+    <section class="import-panel glass">
+      <div class="section-title">Import from Database</div>
+      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <select id="db-select" class="db-select">
+          <option value="pdb">PDB (PDBe-KB)</option>
+          <option value="afdb">AlphaFold DB (AFDB)</option>
+          <option value="esmatlas">ESM Metagenomic Atlas</option>
+        </select>
+        <div class="search-container" style="position: relative;">
+          <input type="text" id="db-input" placeholder="Enter PDB ID (e.g., 1tqn)" autocomplete="off" />
+          <div id="autocomplete-list" class="autocomplete-items" style="display: none;"></div>
+        </div>
+        <button id="import-btn" class="export-btn" style="width: 100%;">Load Structure</button>
+        <div id="search-results" class="search-results" style="display: none;"></div>
+      </div>
+    </section>
+
     <section class="export-panel glass" style="display:none;">
       <div class="section-title">Direct Web Exporter</div>
       <button id="export-stl" class="export-btn" disabled>Download STL</button>

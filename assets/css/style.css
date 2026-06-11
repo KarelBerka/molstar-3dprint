@@ -210,3 +210,128 @@ body {
   background: #000;
   position: relative;
 }
+
+/* Database Import Panel styling */
+.import-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.db-select {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.db-select:focus {
+  border-color: var(--accent-cyan);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.db-select option {
+  background: #151720;
+  color: var(--text-primary);
+}
+
+#db-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 0.625rem 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+#db-input:focus {
+  border-color: var(--accent-cyan);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.autocomplete-items {
+  position: absolute;
+  border: 1px solid var(--border-color);
+  border-top: none;
+  z-index: 99;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  background: rgba(15, 17, 26, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+.autocomplete-item {
+  padding: 0.625rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  transition: background-color 0.2s;
+}
+
+.autocomplete-item:hover {
+  background-color: rgba(6, 182, 212, 0.15);
+  color: #fff;
+}
+
+.autocomplete-item:last-child {
+  border-bottom: none;
+}
+
+/* Search Results list styling */
+.search-results {
+  max-height: 250px;
+  overflow-y: auto;
+  margin-top: 0.5rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.5rem;
+}
+
+.search-result-item {
+  padding: 0.5rem;
+  font-size: 0.8125rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-radius: 4px;
+}
+
+.search-result-item:hover {
+  background-color: rgba(6, 182, 212, 0.15);
+  color: #fff;
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.search-result-title {
+  font-weight: 600;
+  color: var(--accent-cyan);
+  margin-bottom: 0.125rem;
+}
+
+.search-result-desc {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
