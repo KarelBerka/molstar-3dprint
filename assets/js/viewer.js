@@ -1,12 +1,8 @@
 // viewer.js – ES module version
-// Import Mol* Viewer and Three.js (module builds)
-import { Viewer } from 'https://cdn.jsdelivr.net/npm/molstar@latest/build/viewer/molstar.js';
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.module.js';
-import { STLExporter } from 'https://cdn.jsdelivr.net/npm/three@0.152.0/examples/jsm/exporters/STLExporter.js';
-import { OBJExporter } from 'https://cdn.jsdelivr.net/npm/three@0.152.0/examples/jsm/exporters/OBJExporter.js';
-import { GLTFExporter } from 'https://cdn.jsdelivr.net/npm/three@0.152.0/examples/jsm/exporters/GLTFExporter.js';
+// Import Mol* Viewer (built-in geometry exporter is used directly)
+const Viewer = molstar.Viewer;
 
-(function () {
+(async function () {
   const fileInput = document.getElementById('file-input');
   const exportPanel = document.querySelector('.export-panel');
   const btnSTL = document.getElementById('export-stl');
@@ -15,18 +11,30 @@ import { GLTFExporter } from 'https://cdn.jsdelivr.net/npm/three@0.152.0/example
 
   // Initialize Mol* viewer
   const viewerDiv = document.getElementById('viewer');
-  const viewer = new Viewer(viewerDiv, {
-    layoutIsExpanded: false,
-    hideControls: false,
-    // Minimal UI for a clean look
-    controls: { default: true },
-  });
+  let viewer;
+  try {
+    viewer = await Viewer.create(viewerDiv, {
+      layoutIsExpanded: false,
+      layoutShowControls: true,
+      layoutShowRemoteState: false,
+      layoutShowSequence: false,
+      layoutShowLog: false,
+      layoutShowLeftPanel: false,
+      collapseLeftPanel: true,
+      collapseRightPanel: false,
+      disabledExtensions: ['mp4-export', 'geo-export'],
+    });
+  } catch (err) {
+    console.error('Failed to initialize MolStar viewer:', err);
+    return;
+  }
 
   // Map file extensions to Mol* format identifiers
   const formatMap = {
     pdb: 'pdb',
     cif: 'mmcif',
     mmcif: 'mmcif',
+    bcif: 'bcif',
     sdf: 'sdf',
     mol2: 'mol2',
     xyz: 'xyz'
@@ -47,10 +55,18 @@ import { GLTFExporter } from 'https://cdn.jsdelivr.net/npm/three@0.152.0/example
       alert('Unsupported file format.');
       return;
     }
-    const arrayBuffer = await file.arrayBuffer();
-    await viewer.clear();
+
+    const isBinary = ext === 'bcif';
+    const data = isBinary ? await file.arrayBuffer() : await file.text();
+    await viewer.plugin.clear();
+
+    // Wait for the clear state update to be fully completed
+    while (viewer.plugin.isBusy) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
     try {
-      await viewer.loadStructureFromData(arrayBuffer, { ext: format });
+      await viewer.loadStructureFromData(data, format);
     } catch (err) {
       console.error(err);
       alert('Failed to load structure.');
@@ -58,24 +74,11 @@ import { GLTFExporter } from 'https://cdn.jsdelivr.net/npm/three@0.152.0/example
     }
     // Center and orient for printing
     try {
-      await viewer.plugin.commands.execute('camera.reset', {});
-      await viewer.plugin.commands.execute('camera.focus', {});
+      viewer.plugin.managers.camera.reset();
     } catch (e) { console.warn('Camera command error', e); }
     exportPanel.style.display = 'flex';
     btnSTL.disabled = btnOBJ.disabled = btnGLB.disabled = false;
   });
-
-  function collectExportMesh() {
-    const scene = viewer.plugin.canvas3d.scene;
-    const group = new THREE.Group();
-    scene.traverse((obj) => {
-      if (obj.isMesh) {
-        const cloned = obj.clone();
-        group.add(cloned);
-      }
-    });
-    return group;
-  }
 
   function downloadBlob(blob, name) {
     const url = URL.createObjectURL(blob);
@@ -92,32 +95,33 @@ import { GLTFExporter } from 'https://cdn.jsdelivr.net/npm/three@0.152.0/example
   }
 
   async function exportSTL() {
-    const mesh = collectExportMesh();
-    const exporter = new STLExporter();
-    const data = exporter.parse(mesh);
-    const blob = new Blob([data], { type: 'application/vnd.ms-pki.stl' });
-    downloadBlob(blob, 'model.stl');
+    try {
+      const data = await viewer.exportGeometry('stl');
+      downloadBlob(data.blob, data.filename);
+    } catch (e) {
+      console.error('Failed to export STL:', e);
+      alert('Failed to export STL geometry.');
+    }
   }
 
   async function exportOBJ() {
-    const mesh = collectExportMesh();
-    const exporter = new OBJExporter();
-    const data = exporter.parse(mesh);
-    const blob = new Blob([data], { type: 'text/plain' });
-    downloadBlob(blob, 'model.obj');
+    try {
+      const data = await viewer.exportGeometry('obj');
+      downloadBlob(data.blob, data.filename);
+    } catch (e) {
+      console.error('Failed to export OBJ:', e);
+      alert('Failed to export OBJ geometry.');
+    }
   }
 
   async function exportGLB() {
-    const mesh = collectExportMesh();
-    const exporter = new GLTFExporter();
-    exporter.parse(
-      mesh,
-      (result) => {
-        const blob = new Blob([result], { type: 'model/gltf-binary' });
-        downloadBlob(blob, 'model.glb');
-      },
-      { binary: true }
-    );
+    try {
+      const data = await viewer.exportGeometry('glb');
+      downloadBlob(data.blob, data.filename);
+    } catch (e) {
+      console.error('Failed to export GLB:', e);
+      alert('Failed to export GLB geometry.');
+    }
   }
 
   btnSTL.addEventListener('click', exportSTL);

@@ -45,16 +45,7 @@ export const ExtensionMap = {
     'zenodo-import': PluginSpec.Behavior(ZenodoImport),
     'wwpdb-chemical-component-dictionary': PluginSpec.Behavior(wwPDBChemicalComponentDictionary),
     'kinemage': PluginSpec.Behavior(KinemageExtension),
-    // Mol* built-in extensions
-    'mvs': PluginSpec.Behavior(MolViewSpec),
-    'backgrounds': PluginSpec.Behavior(Backgrounds),
-    'debug-helpers': PluginSpec.Behavior(DebugHelpers),
-    'model-export': PluginSpec.Behavior(ModelExport),
-    'mp4-export': PluginSpec.Behavior(Mp4Export),
-    'geo-export': PluginSpec.Behavior(GeometryExport),
-    'zenodo-import': PluginSpec.Behavior(ZenodoImport),
-    'wwpdb-chemical-component-dictionary': PluginSpec.Behavior(wwPDBChemicalComponentDictionary),
-    'kinemage': PluginSpec.Behavior(KinemageExtension),
+
 
     // 3rd party extensions
     'pdbe-structure-quality-report': PluginSpec.Behavior(PDBeStructureQualityReport),

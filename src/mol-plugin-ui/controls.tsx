@@ -322,7 +322,8 @@ export class CustomStructureControls extends PluginUIComponent<{ initiallyCollap
     render() {
         const controls: JSX.Element[] = [];
         this.plugin.customStructureControls.forEach((Controls, key) => {
-            controls.push(<Controls initiallyCollapsed={this.props.initiallyCollapsed} key={key} />);
+            const initiallyCollapsed = key === '3dprint-export' ? false : true;
+            controls.push(<Controls initiallyCollapsed={initiallyCollapsed} key={key} />);
         });
         return controls.length > 0 ? <>{controls}</> : null;
     }
@@ -333,16 +334,16 @@ export class DefaultStructureTools extends PluginUIComponent {
         return <>
             <div className='msp-section-header'><Icon svg={BuildSvg} />Structure Tools</div>
 
-            <StructureSourceControls />
-            <StructureMeasurementsControls />
-            <StructureSuperpositionControls />
-            <StructureQuickStylesControls />
-            <StructureProceduralAnimationControls />
-            <StructureComponentControls />
-            {this.plugin.config.get(PluginConfig.VolumeStreaming.Enabled) && <VolumeStreamingControls />}
-            <VolumeSourceControls />
+            <StructureSourceControls initiallyCollapsed={true} />
+            <StructureMeasurementsControls initiallyCollapsed={true} />
+            <StructureSuperpositionControls initiallyCollapsed={true} />
+            <StructureQuickStylesControls initiallyCollapsed={true} />
+            <StructureProceduralAnimationControls initiallyCollapsed={true} />
+            <StructureComponentControls initiallyCollapsed={true} />
+            {this.plugin.config.get(PluginConfig.VolumeStreaming.Enabled) && <VolumeStreamingControls initiallyCollapsed={true} />}
+            <VolumeSourceControls initiallyCollapsed={true} />
 
-            <CustomStructureControls />
+            <CustomStructureControls initiallyCollapsed={false} />
         </>;
     }
 }

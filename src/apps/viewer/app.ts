@@ -44,6 +44,7 @@ import { Asset } from '../../mol-util/assets';
 import { Color } from '../../mol-util/color';
 import { ExtensionMap } from './extensions';
 import { DefaultViewerOptions, ViewerOptions } from './options';
+import { GeometryControls } from '../../extensions/geo-export/controls';
 
 export { PLUGIN_VERSION as version } from '../../mol-plugin/version';
 export { consoleStats, isDebugMode, isProductionMode, isTimingMode, setDebugMode, setProductionMode, setTimingMode } from '../../mol-util/debug';
@@ -230,6 +231,14 @@ export class Viewer {
         const _data = await this.plugin.builders.data.rawData({ data, label: options?.dataLabel });
         const trajectory = await this.plugin.builders.structure.parseTrajectory(_data, format);
         await this.plugin.builders.structure.hierarchy.applyPreset(trajectory, 'default');
+    }
+
+    async exportGeometry(format: 'glb' | 'obj' | 'stl' | 'usdz', scale?: number) {
+        const controls = new GeometryControls(this.plugin);
+        controls.behaviors.params.next({ format });
+        const finalScale = scale ?? (this.plugin.customState as any).printScaleFactor ?? 1.0;
+        const data = await controls.exportGeometry(finalScale);
+        return data;
     }
 
     loadPdb(pdb: string, options?: LoadStructureOptions) {

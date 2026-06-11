@@ -110,11 +110,15 @@ export class StlExporter extends MeshExporter<StlData> {
         return new Blob([(await this.getData()).stl], { type: 'model/stl' });
     }
 
-    constructor(boundingBox: Box3D) {
+    constructor(boundingBox: Box3D, scale: number = 1.0) {
         super();
         const tmpV = Vec3();
         Vec3.add(tmpV, boundingBox.min, boundingBox.max);
         Vec3.scale(tmpV, tmpV, -0.5);
         this.centerTransform = Mat4.fromTranslation(Mat4(), tmpV);
+        if (scale !== 1.0) {
+            const scaleMat = Mat4.fromScaling(Mat4(), Vec3.create(scale, scale, scale));
+            Mat4.mul(this.centerTransform, scaleMat, this.centerTransform);
+        }
     }
 }

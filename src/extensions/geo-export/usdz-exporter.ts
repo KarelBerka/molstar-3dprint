@@ -232,11 +232,11 @@ def Mesh "mesh${this.meshes.length}"
         return new Blob([usdz], { type: 'model/vnd.usdz+zip' });
     }
 
-    constructor(boundingBox: Box3D, radius: number) {
+    constructor(boundingBox: Box3D, radius: number, scale: number = 1.0) {
         super();
         const t = Mat4();
         // scale the model so that it fits within 1 meter
-        Mat4.fromUniformScaling(t, Math.min(1 / (radius * 2), 1));
+        Mat4.fromUniformScaling(t, Math.min(1 / (radius * 2), 1) * scale);
         // translate the model so that it sits on the ground plane (y = 0)
         Mat4.translate(t, t, Vec3.create(
             -(boundingBox.min[0] + boundingBox.max[0]) / 2,

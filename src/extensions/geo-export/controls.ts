@@ -39,7 +39,7 @@ export class GeometryControls extends PluginComponent {
         return `${idString || 'molstar-model'}`;
     }
 
-    exportGeometry() {
+    exportGeometry(scale?: number) {
         const task = Task.create('Export Geometry', async ctx => {
             try {
                 const renderObjects = this.plugin.canvas3d?.getRenderObjects()!;
@@ -50,16 +50,16 @@ export class GeometryControls extends PluginComponent {
                 let renderObjectExporter: GlbExporter | ObjExporter | StlExporter | UsdzExporter;
                 switch (this.behaviors.params.value.format) {
                     case 'glb':
-                        renderObjectExporter = new GlbExporter(boundingBox);
+                        renderObjectExporter = new GlbExporter(boundingBox, scale);
                         break;
                     case 'obj':
-                        renderObjectExporter = new ObjExporter(filename, boundingBox);
+                        renderObjectExporter = new ObjExporter(filename, boundingBox, scale);
                         break;
                     case 'stl':
-                        renderObjectExporter = new StlExporter(boundingBox);
+                        renderObjectExporter = new StlExporter(boundingBox, scale);
                         break;
                     case 'usdz':
-                        renderObjectExporter = new UsdzExporter(boundingBox, boundingSphere.radius);
+                        renderObjectExporter = new UsdzExporter(boundingBox, boundingSphere.radius, scale);
                         break;
                     default: throw new Error('Unsupported format.');
                 }

@@ -4,44 +4,52 @@
   <meta charset="UTF-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>3DP‑JMOL – Mol* Viewer</title>
+  <title>3DP-Mol* – Mol* Viewer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Outfit:wght@500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/css/style.css" />
   <!-- Mol* CSS -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/molstar@latest/build/viewer/molstar.css" />
+  <link rel="stylesheet" href="build/viewer/molstar.css" />
   <!-- Mol* script (global) -->
-  <script src="https://cdn.jsdelivr.net/npm/molstar@latest/build/viewer/molstar.js"></script>
+  <script src="build/viewer/molstar.js"></script>
   <!-- Simple favicon to avoid 404 -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'></svg>" />
+  <!-- Import map to resolve bare 'three' imports from JSM exporters -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.module.js"
+      }
+    }
+  </script>
 </head>
 <body>
-  <header class="header">
-    <h1 class="title">3DP‑JMOL – Mol* Viewer</h1>
-    <p class="subtitle">Upload a molecular file, visualise it, and export printable 3‑D meshes (STL, OBJ, GLB).</p>
-  </header>
+  <div class="sidebar">
+    <header class="header">
+      <h1 class="title">3DP-Mol*</h1>
+      <p class="subtitle">Upload molecular files, calculate planning support struts, and export 3D-printable meshes.</p>
+    </header>
 
-  <main class="main">
     <section class="upload-panel glass">
-      <input type="file" id="file-input" accept=".pdb,.cif,.sdf,.mol2,.xyz" />
-      <p class="note">Supported formats: PDB, mmCIF, SDF, MOL2, XYZ (max 100 MB)</p>
+      <div class="section-title">Upload Structure</div>
+      <input type="file" id="file-input" accept=".pdb,.cif,.mmcif,.bcif,.sdf,.mol2,.xyz" />
+      <p class="note">Formats: PDB, mmCIF, BinaryCIF, SDF, MOL2, XYZ (max 100 MB)</p>
     </section>
 
-    <section id="viewer" class="viewer glass"></section>
-<section class="selection-panel glass" style="display:none;">
-  <p>Select parts for export (future feature)</p>
-</section>
-<section class="export-panel glass" style="display:none;">
+    <section class="export-panel glass" style="display:none;">
+      <div class="section-title">Direct Web Exporter</div>
       <button id="export-stl" class="export-btn" disabled>Download STL</button>
       <button id="export-obj" class="export-btn" disabled>Download OBJ</button>
       <button id="export-glb" class="export-btn" disabled>Download GLB</button>
     </section>
-  </main>
 
-  <footer class="footer">
-    <p>© 2026 3DP‑JMOL – Built with <a href="https://molstar.org" target="_blank">Mol*</a></p>
-  </footer>
+    <footer class="footer">
+      <p>© 2026 3DP-Mol* – Built with <a href="https://molstar.org" target="_blank">Mol*</a></p>
+    </footer>
+  </div>
+
+  <main id="viewer" class="viewer"></main>
 
   <!-- Viewer logic as ES module (imports Three.js only) -->
   <script type="module" src="assets/js/viewer.js"></script>
