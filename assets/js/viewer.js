@@ -149,7 +149,7 @@ const Viewer = molstar.Viewer;
     } else if (db === 'afdb') {
       dbInput.placeholder = 'Enter UniProt ID (e.g., P00533)';
     } else if (db === 'esmatlas') {
-      dbInput.placeholder = 'Enter MGnify ID (e.g., MGYP003670600000)';
+      dbInput.placeholder = 'Enter MGnify ID (e.g., MGYP003670600000) or sequence';
     }
   });
 
@@ -392,19 +392,96 @@ const Viewer = molstar.Viewer;
   }
 
   // Load ESM Atlas structure
-  async function loadEsmAtlas(id) {
-    id = id.trim();
-    if (!id) return;
+  async function loadEsmAtlas(input) {
+    input = input.trim();
+    if (!input) return;
+
+    // Check if input is a raw sequence or a FASTA format
+    let isSequence = false;
+    let sequenceData = input;
+    if (input.startsWith('>')) {
+      isSequence = true;
+      const lines = input.split('\n');
+      lines.shift();
+      sequenceData = lines.join('').replace(/\s/g, '');
+    } else if (/^[ACDEFGHIKLMNPQRSTVWY\s\n]+$/i.test(input) && input.length >= 10) {
+      const cleaned = input.replace(/\s/g, '');
+      if (/^[ACDEFGHIKLMNPQRSTVWY]+$/i.test(cleaned)) {
+        isSequence = true;
+        sequenceData = cleaned;
+      }
+    }
+
     setLoadingState(true);
-    // ESM Atlas fetch predicted structure endpoint does not expect ".pdb" extension in the path URL
-    const url = `https://api.esmatlas.com/fetchPredictedStructure/${id}`;
-    try {
-      await loadFromUrl(url, 'pdb');
-      setLoadingState(false);
-    } catch (err) {
-      console.error(err);
-      alert(`Failed to load ESM Atlas structure for ID ${id}.`);
-      setLoadingState(false);
+
+    if (isSequence) {
+      const url = 'https://api.esmatlas.com/foldSequence/v1/pdb/';
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain'
+          },
+          body: sequenceData
+        });
+        if (!response.ok) {
+          throw new Error(`ESM Fold API error! status: ${response.status}`);
+        }
+        const data = await response.text();
+
+        await viewer.plugin.clear();
+        while (viewer.plugin.isBusy) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+
+        await viewer.loadStructureFromData(data, 'pdb');
+        try {
+          viewer.plugin.managers.camera.reset();
+        } catch (e) {
+          console.warn('Camera reset error', e);
+        }
+        exportPanel.style.display = 'flex';
+        btnSTL.disabled = btnOBJ.disabled = btnGLB.disabled = false;
+        searchResults.style.display = 'none';
+        setLoadingState(false);
+      } catch (err) {
+        console.error(err);
+        alert(`Failed to fold sequence via ESM Fold API: ${err.message}`);
+        setLoadingState(false);
+      }
+    } else {
+      const id = input;
+      const url = `https://api.esmatlas.com/fetchPredictedStructure/${id}`;
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          if (response.status === 403 || response.status === 404) {
+            throw new Error(`Structure for ID ${id} was not found (403/404). It might not be precomputed in the ESM Metagenomic Atlas.`);
+          }
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.text();
+
+        await viewer.plugin.clear();
+        while (viewer.plugin.isBusy) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+
+        await viewer.loadStructureFromData(data, 'pdb');
+        try {
+          viewer.plugin.managers.camera.reset();
+        } catch (e) {
+          console.warn('Camera reset error', e);
+        }
+        exportPanel.style.display = 'flex';
+        btnSTL.disabled = btnOBJ.disabled = btnGLB.disabled = false;
+        searchResults.style.display = 'none';
+        setLoadingState(false);
+      } catch (err) {
+        console.error(err);
+        alert(`Failed to load ESM Atlas structure: ${err.message}`);
+        setLoadingState(false);
+      }
     }
   }
 })();
