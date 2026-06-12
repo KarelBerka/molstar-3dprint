@@ -150,6 +150,8 @@ const Viewer = molstar.Viewer;
       dbInput.placeholder = 'Enter UniProt ID (e.g., P00533)';
     } else if (db === 'esmatlas') {
       dbInput.placeholder = 'Enter MGnify ID (e.g., MGYP003670600000) or sequence';
+    } else if (db === 'mddb') {
+      dbInput.placeholder = 'Enter MDDB ID (e.g., A0001)';
     }
   });
 
@@ -338,6 +340,8 @@ const Viewer = molstar.Viewer;
       loadAfdb(val);
     } else if (db === 'esmatlas') {
       loadEsmAtlas(val);
+    } else if (db === 'mddb') {
+      loadMddb(val);
     }
   });
 
@@ -482,6 +486,22 @@ const Viewer = molstar.Viewer;
         alert(`Failed to load ESM Atlas structure: ${err.message}`);
         setLoadingState(false);
       }
+    }
+  }
+
+  // Load MDDB structure
+  async function loadMddb(id) {
+    id = id.trim().toUpperCase();
+    if (!id) return;
+    setLoadingState(true);
+    const url = `https://mmb.mddbr.eu/api/rest/v1/projects/${id}/structure`;
+    try {
+      await loadFromUrl(url, 'pdb');
+      setLoadingState(false);
+    } catch (err) {
+      console.error(err);
+      alert(`Failed to load MDDB structure for project ID ${id}.`);
+      setLoadingState(false);
     }
   }
 })();
