@@ -346,14 +346,48 @@ const Viewer = molstar.Viewer;
     uniprot = uniprot.trim().toUpperCase();
     if (!uniprot) return;
     setLoadingState(true);
-    const url = `https://alphafold.ebi.ac.uk/files/AF-${uniprot}-F1-model_v4.cif`;
     try {
-      await loadFromUrl(url, 'mmcif');
+      await viewer.plugin.clear();
+      while (viewer.plugin.isBusy) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+
+      // Load using MolStar's native AlphaFold DB task (which resolves version dynamically)
+      await viewer.loadAlphaFoldDb(uniprot);
+
+      while (viewer.plugin.isBusy) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+
+      try {
+        viewer.plugin.managers.camera.reset();
+      } catch (e) {
+        console.warn('Camera reset error', e);
+      }
+      exportPanel.style.display = 'flex';
+      btnSTL.disabled = btnOBJ.disabled = btnGLB.disabled = false;
+      searchResults.style.display = 'none';
       setLoadingState(false);
     } catch (err) {
-      console.error(err);
-      alert(`Failed to load AlphaFold structure for UniProt ID ${uniprot}.`);
-      setLoadingState(false);
+      console.error('Failed to load AlphaFold structure natively, trying fallback...', err);
+      // Fallback: Fetch EBI API manually and load via loadFromUrl
+      try {
+        const apiRes = await fetch(`https://www.alphafold.ebi.ac.uk/api/prediction/${uniprot}`);
+        if (!apiRes.ok) throw new Error(`EBI prediction API status ${apiRes.status}`);
+        const apiData = await apiRes.json();
+        if (Array.isArray(apiData) && apiData.length > 0) {
+          const cifUrl = apiData[0].cifUrl;
+          if (!cifUrl) throw new Error('No cifUrl found in prediction data');
+          await loadFromUrl(cifUrl, 'mmcif');
+          setLoadingState(false);
+        } else {
+          throw new Error('Empty prediction data array');
+        }
+      } catch (fallbackErr) {
+        console.error('Fallback AlphaFold loader failed:', fallbackErr);
+        alert(`Failed to load AlphaFold structure for UniProt ID ${uniprot}.`);
+        setLoadingState(false);
+      }
     }
   }
 
@@ -362,7 +396,8 @@ const Viewer = molstar.Viewer;
     id = id.trim();
     if (!id) return;
     setLoadingState(true);
-    const url = `https://api.esmatlas.com/fetchPredictedStructure/${id}.pdb`;
+    // ESM Atlas fetch predicted structure endpoint does not expect ".pdb" extension in the path URL
+    const url = `https://api.esmatlas.com/fetchPredictedStructure/${id}`;
     try {
       await loadFromUrl(url, 'pdb');
       setLoadingState(false);
