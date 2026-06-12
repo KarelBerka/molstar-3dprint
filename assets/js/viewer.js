@@ -494,7 +494,7 @@ const Viewer = molstar.Viewer;
     id = id.trim().toUpperCase();
     if (!id) return;
     setLoadingState(true);
-    const url = `https://mmb.mddbr.eu/api/rest/v1/projects/${id}/structure`;
+    const url = `https://mmb.mddbr.eu/api/rest/v1/projects/${id}/files/structure.pdb`;
     try {
       await loadFromUrl(url, 'pdb');
       setLoadingState(false);
