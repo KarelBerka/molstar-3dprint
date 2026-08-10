@@ -10,8 +10,9 @@ import { PluginStateObject } from '../../mol-plugin-state/objects';
 import { StateTransforms } from '../../mol-plugin-state/transforms';
 import { PresetStructureRepresentations } from '../../mol-plugin-state/builder/structure/representation-preset';
 import { GeometryParams, GeometryControls } from '../geo-export/controls';
-import { StrutsParams, StrutsProps, StrutsFromStructure } from './struts';
+import { StrutsParams, StrutsProps, StrutsFromStructure, StandBaseFromStructure, StandPillarsFromStructure } from './struts';
 import { ParamDefinition as PD } from '../../mol-util/param-definition';
+import { MmcifFormat } from '../../mol-model-formats/structure/mmcif';
 
 interface ThreeDPrintUIState {
     targetSizeInput: string;
@@ -53,6 +54,30 @@ export class ThreeDPrintPlanningUI extends CollapsableControls<{}, ThreeDPrintUI
             }
         }
         return { x: 0, y: 0, z: 0, maxDim: 0 };
+    }
+
+    private getStructureMetadata() {
+        const structures = this.plugin.managers.structure.hierarchy.current.structures;
+        if (structures.length > 0) {
+            const s = structures[0];
+            const model = s.cell.obj?.data.models[0];
+            if (model) {
+                const entryId = model.entryId || '';
+                let title = '';
+                const sourceData = model.sourceData;
+                if (MmcifFormat.is(sourceData)) {
+                    const db = sourceData.data.db;
+                    if (db.struct && db.struct.title && db.struct.title.rowCount > 0) {
+                        title = db.struct.title.value(0) || '';
+                    }
+                }
+                if (!title) {
+                    title = s.cell.obj?.label || '';
+                }
+                return { entryId, title };
+            }
+        }
+        return { entryId: '', title: '' };
     }
 
     applyPreset = async (presetType: 'spacefill' | 'ball-and-stick' | 'cartoon' | 'surface') => {
@@ -185,16 +210,50 @@ export class ThreeDPrintPlanningUI extends CollapsableControls<{}, ThreeDPrintUI
             const structRef = structures[0].transform.ref;
 
             const update = state.build();
-            const existing = state.select(StateSelection.Generators.ofTransformer(StrutsFromStructure));
             const strutsParams = this.state.strutsParams;
 
-            if (existing.length > 0) {
-                update.to(existing[0].transform.ref).update(strutsParams);
+            // 1. Connecting Struts
+            const existingStruts = state.select(StateSelection.Generators.ofTransformer(StrutsFromStructure));
+            if (existingStruts.length > 0) {
+                update.to(existingStruts[0].transform.ref).update(strutsParams);
             } else {
                 update.to(structRef)
                     .apply(StrutsFromStructure, strutsParams)
                     .apply(StateTransforms.Representation.ShapeRepresentation3D);
             }
+
+            // 2. Stand Base Plate
+            const existingBase = state.select(StateSelection.Generators.ofTransformer(StandBaseFromStructure));
+            if (strutsParams.showStand) {
+                if (existingBase.length > 0) {
+                    update.to(existingBase[0].transform.ref).update(strutsParams);
+                } else {
+                    update.to(structRef)
+                        .apply(StandBaseFromStructure, strutsParams)
+                        .apply(StateTransforms.Representation.ShapeRepresentation3D);
+                }
+            } else {
+                if (existingBase.length > 0) {
+                    update.delete(existingBase[0].transform.ref);
+                }
+            }
+
+            // 3. Stand Pillars
+            const existingPillars = state.select(StateSelection.Generators.ofTransformer(StandPillarsFromStructure));
+            if (strutsParams.showStand && strutsParams.standPillarCount > 0) {
+                if (existingPillars.length > 0) {
+                    update.to(existingPillars[0].transform.ref).update(strutsParams);
+                } else {
+                    update.to(structRef)
+                        .apply(StandPillarsFromStructure, strutsParams)
+                        .apply(StateTransforms.Representation.ShapeRepresentation3D);
+                }
+            } else {
+                if (existingPillars.length > 0) {
+                    update.delete(existingPillars[0].transform.ref);
+                }
+            }
+
             await update.commit();
         } catch (e) {
             console.error('Failed to generate support struts', e);
@@ -207,12 +266,24 @@ export class ThreeDPrintPlanningUI extends CollapsableControls<{}, ThreeDPrintUI
         try {
             this.setState({ busy: true });
             const state = this.plugin.state.data;
-            const existing = state.select(StateSelection.Generators.ofTransformer(StrutsFromStructure));
-            if (existing.length > 0) {
-                const update = state.build();
-                update.delete(existing[0].transform.ref);
-                await update.commit();
+            const update = state.build();
+
+            const existingStruts = state.select(StateSelection.Generators.ofTransformer(StrutsFromStructure));
+            if (existingStruts.length > 0) {
+                update.delete(existingStruts[0].transform.ref);
             }
+
+            const existingBase = state.select(StateSelection.Generators.ofTransformer(StandBaseFromStructure));
+            if (existingBase.length > 0) {
+                update.delete(existingBase[0].transform.ref);
+            }
+
+            const existingPillars = state.select(StateSelection.Generators.ofTransformer(StandPillarsFromStructure));
+            if (existingPillars.length > 0) {
+                update.delete(existingPillars[0].transform.ref);
+            }
+
+            await update.commit();
         } catch (e) {
             console.error('Failed to clear support struts', e);
         } finally {
@@ -238,6 +309,11 @@ export class ThreeDPrintPlanningUI extends CollapsableControls<{}, ThreeDPrintUI
             }
             const data = await this.geoControls.exportGeometry(scale);
             download(data.blob, data.filename);
+            if (data.additionalFiles) {
+                for (const f of data.additionalFiles) {
+                    download(f.blob, f.filename);
+                }
+            }
         } catch (e) {
             console.error(e);
         } finally {
@@ -354,17 +430,17 @@ export class ThreeDPrintPlanningUI extends CollapsableControls<{}, ThreeDPrintUI
             </div>
 
             <div className='msp-section-header'>Durable Print Presets</div>
-            <div className='msp-btn-row' style={{ margin: '8px 0' }}>
-                <Button onClick={() => this.applyPreset('spacefill')} disabled={this.state.busy || info.maxDim === 0} style={{ width: '23%', marginRight: '2%' }}>
+            <div className='msp-flex-row'>
+                <Button onClick={() => this.applyPreset('spacefill')} disabled={this.state.busy || info.maxDim === 0}>
                     Spacefill
                 </Button>
-                <Button onClick={() => this.applyPreset('ball-and-stick')} disabled={this.state.busy || info.maxDim === 0} style={{ width: '23%', marginRight: '2%' }}>
+                <Button onClick={() => this.applyPreset('ball-and-stick')} disabled={this.state.busy || info.maxDim === 0}>
                     B&S
                 </Button>
-                <Button onClick={() => this.applyPreset('cartoon')} disabled={this.state.busy || info.maxDim === 0} style={{ width: '23%', marginRight: '2%' }}>
+                <Button onClick={() => this.applyPreset('cartoon')} disabled={this.state.busy || info.maxDim === 0}>
                     Cartoon
                 </Button>
-                <Button onClick={() => this.applyPreset('surface')} disabled={this.state.busy || info.maxDim === 0} style={{ width: '25%' }}>
+                <Button onClick={() => this.applyPreset('surface')} disabled={this.state.busy || info.maxDim === 0}>
                     Surface
                 </Button>
             </div>
@@ -376,11 +452,36 @@ export class ThreeDPrintPlanningUI extends CollapsableControls<{}, ThreeDPrintUI
                 onChangeValues={xs => this.setState({ strutsParams: xs })}
                 isDisabled={this.state.busy || info.maxDim === 0}
             />
-            <div className='msp-btn-row' style={{ margin: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
-                <Button icon={BuildSvg} onClick={this.generateStruts} disabled={this.state.busy || info.maxDim === 0} style={{ width: '48%', marginRight: '4%' }}>
+            {info.maxDim > 0 && (
+                <div className='msp-flex-row' style={{ margin: '4px 0 8px 0' }}>
+                    <Button onClick={() => {
+                        const meta = this.getStructureMetadata();
+                        if (meta.entryId) {
+                            this.setState({
+                                strutsParams: { ...this.state.strutsParams, standText: meta.entryId }
+                            });
+                        }
+                    }} disabled={this.state.busy} title='Copy PDB Entry ID to Stand Text'>
+                        Use ID {this.getStructureMetadata().entryId ? `(${this.getStructureMetadata().entryId})` : ''}
+                    </Button>
+                    <Button onClick={() => {
+                        const meta = this.getStructureMetadata();
+                        if (meta.title) {
+                            const t = meta.title.length > 20 ? meta.title.substring(0, 17) + '...' : meta.title;
+                            this.setState({
+                                strutsParams: { ...this.state.strutsParams, standText: t }
+                            });
+                        }
+                    }} disabled={this.state.busy} title='Copy structure title to Stand Text (truncated)'>
+                        Use Title
+                    </Button>
+                </div>
+            )}
+            <div className='msp-flex-row' style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
+                <Button icon={BuildSvg} onClick={this.generateStruts} disabled={this.state.busy || info.maxDim === 0}>
                     Generate
                 </Button>
-                <Button icon={ClearSvg} onClick={this.clearStruts} disabled={this.state.busy || info.maxDim === 0} style={{ width: '48%' }}>
+                <Button icon={ClearSvg} onClick={this.clearStruts} disabled={this.state.busy || info.maxDim === 0}>
                     Clear
                 </Button>
             </div>

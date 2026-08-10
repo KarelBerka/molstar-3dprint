@@ -12,6 +12,9 @@ const Viewer = molstar.Viewer;
   // Initialize Mol* viewer
   const viewerDiv = document.getElementById('viewer');
   let viewer;
+  let orbitalVolumePosNode = null;
+  let orbitalVolumeNegNode = null;
+  let orbitalVolumeData = null;
   try {
     viewer = await Viewer.create(viewerDiv, {
       layoutIsExpanded: false,
@@ -37,7 +40,9 @@ const Viewer = molstar.Viewer;
     bcif: 'bcif',
     sdf: 'sdf',
     mol2: 'mol2',
-    xyz: 'xyz'
+    xyz: 'xyz',
+    cube: 'cube',
+    cub: 'cube'
   };
 
   const MAX_SIZE = 100 * 1024 * 1024; // 100 MB
@@ -58,26 +63,31 @@ const Viewer = molstar.Viewer;
 
     const isBinary = ext === 'bcif';
     const data = isBinary ? await file.arrayBuffer() : await file.text();
-    await viewer.plugin.clear();
+    if (format === 'cube') {
+      await loadCubeFromData(data);
+    } else {
+      // Hide orbital controls for non-cube files
+      document.getElementById('orbital-controls').style.display = 'none';
 
-    // Wait for the clear state update to be fully completed
-    while (viewer.plugin.isBusy) {
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
+      await viewer.plugin.clear();
+      while (viewer.plugin.isBusy) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
 
-    try {
-      await viewer.loadStructureFromData(data, format);
-    } catch (err) {
-      console.error(err);
-      alert('Failed to load structure.');
-      return;
+      try {
+        await viewer.loadStructureFromData(data, format);
+      } catch (err) {
+        console.error(err);
+        alert('Failed to load structure.');
+        return;
+      }
+      // Center and orient for printing
+      try {
+        viewer.plugin.managers.camera.reset();
+      } catch (e) { console.warn('Camera command error', e); }
+      exportPanel.style.display = 'flex';
+      btnSTL.disabled = btnOBJ.disabled = btnGLB.disabled = false;
     }
-    // Center and orient for printing
-    try {
-      viewer.plugin.managers.camera.reset();
-    } catch (e) { console.warn('Camera command error', e); }
-    exportPanel.style.display = 'flex';
-    btnSTL.disabled = btnOBJ.disabled = btnGLB.disabled = false;
   });
 
   function downloadBlob(blob, name) {
@@ -98,6 +108,9 @@ const Viewer = molstar.Viewer;
     try {
       const data = await viewer.exportGeometry('stl');
       downloadBlob(data.blob, data.filename);
+      if (data.additionalFiles) {
+        data.additionalFiles.forEach(f => downloadBlob(f.blob, f.filename));
+      }
     } catch (e) {
       console.error('Failed to export STL:', e);
       alert('Failed to export STL geometry.');
@@ -108,6 +121,9 @@ const Viewer = molstar.Viewer;
     try {
       const data = await viewer.exportGeometry('obj');
       downloadBlob(data.blob, data.filename);
+      if (data.additionalFiles) {
+        data.additionalFiles.forEach(f => downloadBlob(f.blob, f.filename));
+      }
     } catch (e) {
       console.error('Failed to export OBJ:', e);
       alert('Failed to export OBJ geometry.');
@@ -118,6 +134,9 @@ const Viewer = molstar.Viewer;
     try {
       const data = await viewer.exportGeometry('glb');
       downloadBlob(data.blob, data.filename);
+      if (data.additionalFiles) {
+        data.additionalFiles.forEach(f => downloadBlob(f.blob, f.filename));
+      }
     } catch (e) {
       console.error('Failed to export GLB:', e);
       alert('Failed to export GLB geometry.');
@@ -144,6 +163,11 @@ const Viewer = molstar.Viewer;
     autocompleteList.innerHTML = '';
     dbInput.value = '';
 
+    // Hide orbital controls unless we are switching to orbitals
+    if (db !== 'orbitals') {
+      document.getElementById('orbital-controls').style.display = 'none';
+    }
+
     if (db === 'pdb') {
       dbInput.placeholder = 'Enter PDB ID (e.g., 1tqn) or name';
     } else if (db === 'afdb') {
@@ -152,13 +176,22 @@ const Viewer = molstar.Viewer;
       dbInput.placeholder = 'Enter MGnify ID (e.g., MGYP003670600000) or sequence';
     } else if (db === 'mddb') {
       dbInput.placeholder = 'Enter MDDB ID (e.g., A0001)';
+    } else if (db === 'pubchem') {
+      dbInput.placeholder = 'Enter Compound Name (e.g., aspirin) or CID';
+    } else if (db === 'chembl') {
+      dbInput.placeholder = 'Enter Molecule Name (e.g., caffeine) or ChEMBL ID';
+    } else if (db === 'orbitals') {
+      dbInput.placeholder = 'Enter "benzene" for demo, or InChIKey for PQR';
+      // Show orbital controls
+      document.getElementById('orbital-controls').style.display = 'flex';
     }
   });
 
   // Fetch PDBe Autocomplete suggestions
   let debounceTimeout = null;
   dbInput.addEventListener('input', () => {
-    if (dbSelect.value !== 'pdb') {
+    const db = dbSelect.value;
+    if (db !== 'pdb' && db !== 'pubchem' && db !== 'chembl') {
       autocompleteList.style.display = 'none';
       return;
     }
@@ -172,43 +205,95 @@ const Viewer = molstar.Viewer;
 
     debounceTimeout = setTimeout(async () => {
       try {
-        const res = await fetch(`https://www.ebi.ac.uk/pdbe/search/pdb-autocomplete/select?rows=10&wt=json&q=value:${encodeURIComponent(query)}*`);
-        if (!res.ok) return;
-        const data = await res.json();
-        const docs = data.response && data.response.docs ? data.response.docs : [];
+        if (db === 'pdb') {
+          const res = await fetch(`https://www.ebi.ac.uk/pdbe/search/pdb-autocomplete/select?rows=10&wt=json&q=value:${encodeURIComponent(query)}*`);
+          if (!res.ok) return;
+          const data = await res.json();
+          const docs = data.response && data.response.docs ? data.response.docs : [];
 
-        if (docs.length === 0) {
-          autocompleteList.style.display = 'none';
-          return;
-        }
-
-        autocompleteList.innerHTML = '';
-        docs.forEach(doc => {
-          const div = document.createElement('div');
-          div.className = 'autocomplete-item';
-
-          let displayLabel = '';
-          if (doc.var_name === 'pdb_id') {
-            displayLabel = `<strong>PDB ID:</strong> ${doc.value}`;
-          } else {
-            const cat = doc.category || doc.var_name;
-            const entries = doc.num_pdb_entries ? ` (${doc.num_pdb_entries} entries)` : '';
-            displayLabel = `<strong>${cat}:</strong> ${doc.value}${entries}`;
+          if (docs.length === 0) {
+            autocompleteList.style.display = 'none';
+            return;
           }
 
-          div.innerHTML = displayLabel;
-          div.addEventListener('click', () => {
-            dbInput.value = doc.value;
-            autocompleteList.style.display = 'none';
+          autocompleteList.innerHTML = '';
+          docs.forEach(doc => {
+            const div = document.createElement('div');
+            div.className = 'autocomplete-item';
+
+            let displayLabel = '';
             if (doc.var_name === 'pdb_id') {
-              loadPdb(doc.value);
+              displayLabel = `<strong>PDB ID:</strong> ${doc.value}`;
             } else {
-              searchPdbTerm(doc.value, doc.var_name);
+              const cat = doc.category || doc.var_name;
+              const entries = doc.num_pdb_entries ? ` (${doc.num_pdb_entries} entries)` : '';
+              displayLabel = `<strong>${cat}:</strong> ${doc.value}${entries}`;
             }
+
+            div.innerHTML = displayLabel;
+            div.addEventListener('click', () => {
+              dbInput.value = doc.value;
+              autocompleteList.style.display = 'none';
+              if (doc.var_name === 'pdb_id') {
+                loadPdb(doc.value);
+              } else {
+                searchPdbTerm(doc.value, doc.var_name);
+              }
+            });
+            autocompleteList.appendChild(div);
           });
-          autocompleteList.appendChild(div);
-        });
-        autocompleteList.style.display = 'block';
+          autocompleteList.style.display = 'block';
+        } else if (db === 'pubchem') {
+          const res = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/autocomplete/compound/${encodeURIComponent(query)}/json`);
+          if (!res.ok) return;
+          const data = await res.json();
+          const terms = data.dictionary_terms || [];
+
+          if (terms.length === 0) {
+            autocompleteList.style.display = 'none';
+            return;
+          }
+
+          autocompleteList.innerHTML = '';
+          terms.forEach(term => {
+            const div = document.createElement('div');
+            div.className = 'autocomplete-item';
+            div.innerHTML = `<strong>Compound:</strong> ${term}`;
+            div.addEventListener('click', () => {
+              dbInput.value = term;
+              autocompleteList.style.display = 'none';
+              loadPubChem(term);
+            });
+            autocompleteList.appendChild(div);
+          });
+          autocompleteList.style.display = 'block';
+        } else if (db === 'chembl') {
+          const res = await fetch(`https://www.ebi.ac.uk/chembl/api/data/molecule?q=${encodeURIComponent(query)}&format=json&limit=10`);
+          if (!res.ok) return;
+          const data = await res.json();
+          const molecules = data.molecules || [];
+
+          if (molecules.length === 0) {
+            autocompleteList.style.display = 'none';
+            return;
+          }
+
+          autocompleteList.innerHTML = '';
+          molecules.forEach(mol => {
+            const div = document.createElement('div');
+            div.className = 'autocomplete-item';
+            const name = mol.pref_name || mol.molecule_chembl_id;
+            const extra = mol.pref_name ? ` (${mol.molecule_chembl_id})` : '';
+            div.innerHTML = `<strong>Molecule:</strong> ${name}${extra}`;
+            div.addEventListener('click', () => {
+              dbInput.value = mol.molecule_chembl_id;
+              autocompleteList.style.display = 'none';
+              loadChEMBL(mol.molecule_chembl_id, mol.molecule_structures ? mol.molecule_structures.standard_inchi_key : undefined);
+            });
+            autocompleteList.appendChild(div);
+          });
+          autocompleteList.style.display = 'block';
+        }
       } catch (err) {
         console.error('Error fetching autocomplete:', err);
       }
@@ -263,8 +348,10 @@ const Viewer = molstar.Viewer;
   // Load PDB structure
   async function loadPdb(id) {
     id = id.trim().toLowerCase();
-    if (!id || id.length !== 4) {
-      alert('PDB ID must be 4 characters.');
+    const isStandard = /^[0-9a-z]{4}$/.test(id);
+    const isExtended = /^pdb_[0-9a-z]{8}$/.test(id);
+    if (!isStandard && !isExtended) {
+      alert('PDB ID must be a standard 4-character ID (e.g., 1tqn) or a 12-character extended ID (e.g., pdb_00006vmt).');
       return;
     }
 
@@ -342,6 +429,12 @@ const Viewer = molstar.Viewer;
       loadEsmAtlas(val);
     } else if (db === 'mddb') {
       loadMddb(val);
+    } else if (db === 'pubchem') {
+      loadPubChem(val);
+    } else if (db === 'chembl') {
+      loadChEMBL(val);
+    } else if (db === 'orbitals') {
+      loadOrbital(val);
     }
   });
 
@@ -503,5 +596,285 @@ const Viewer = molstar.Viewer;
       alert(`Failed to load MDDB structure for project ID ${id}.`);
       setLoadingState(false);
     }
+  }
+
+  // Load PubChem structure
+  async function loadPubChem(idOrName) {
+    idOrName = idOrName.trim();
+    if (!idOrName) return;
+    setLoadingState(true);
+    // Hide orbital controls
+    document.getElementById('orbital-controls').style.display = 'none';
+
+    let url;
+    if (/^\d+$/.test(idOrName)) {
+      url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${idOrName}/SDF?record_type=3d`;
+    } else {
+      url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(idOrName)}/SDF?record_type=3d`;
+    }
+
+    try {
+      await loadFromUrl(url, 'sdf');
+      setLoadingState(false);
+    } catch (err) {
+      console.error(err);
+      alert(`Failed to load PubChem compound "${idOrName}". Make sure it has 3D coordinates available.`);
+      setLoadingState(false);
+    }
+  }
+
+  // Load ChEMBL structure
+  async function loadChEMBL(chemblId, inchiKey) {
+    chemblId = chemblId.trim().toUpperCase();
+    if (!chemblId) return;
+    setLoadingState(true);
+    // Hide orbital controls
+    document.getElementById('orbital-controls').style.display = 'none';
+
+    try {
+      if (!inchiKey) {
+        const res = await fetch(`https://www.ebi.ac.uk/chembl/api/data/molecule/${chemblId}?format=json`);
+        if (res.ok) {
+          const data = await res.json();
+          inchiKey = data.molecule_structures ? data.molecule_structures.standard_inchi_key : undefined;
+        }
+      }
+
+      if (inchiKey) {
+        const pubchemUrl = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchikey/${inchiKey}/SDF?record_type=3d`;
+        try {
+          await loadFromUrl(pubchemUrl, 'sdf');
+          setLoadingState(false);
+          return;
+        } catch (pubchemErr) {
+          console.warn('Failed to load 3D SDF from PubChem using InChIKey, falling back to ChEMBL 2D SDF...', pubchemErr);
+        }
+      }
+
+      const chemblUrl = `https://www.ebi.ac.uk/chembl/api/data/molecule/${chemblId}.sdf`;
+      await loadFromUrl(chemblUrl, 'sdf');
+      setLoadingState(false);
+    } catch (err) {
+      console.error(err);
+      alert(`Failed to load ChEMBL molecule ${chemblId}.`);
+      setLoadingState(false);
+    }
+  }
+
+  // Load PQR Orbital file
+  async function loadOrbital(query) {
+    query = query.trim();
+    if (!query) return;
+
+    if (query.toLowerCase() === 'benzene') {
+      setLoadingState(true);
+      try {
+        const res = await fetch('examples/benzene-homo.cube');
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const text = await res.text();
+        await loadCubeFromData(text);
+      } catch (err) {
+        console.error(err);
+        alert('Failed to load local benzene demo orbital file.');
+        setLoadingState(false);
+      }
+      return;
+    }
+
+    setLoadingState(true);
+    try {
+      let inchiKey = query;
+      const isInChIKey = /^[A-Z]{14}-[A-Z]{10}-[A-Z]$/i.test(query);
+      if (!isInChIKey) {
+        const res = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(query)}/property/InChIKey/JSON`);
+        if (res.ok) {
+          const data = await res.json();
+          inchiKey = (data.PropertyTable && data.PropertyTable.Properties && data.PropertyTable.Properties[0]) ? data.PropertyTable.Properties[0].InChIKey : undefined;
+        }
+        if (!inchiKey) {
+          throw new Error(`Could not resolve compound name "${query}" to InChIKey`);
+        }
+      }
+
+      const pqrUrl = `https://pqr.pitt.edu/api/cube/${inchiKey}`;
+      const response = await fetch(pqrUrl);
+      if (!response.ok) {
+        throw new Error(`PQR API error! status: ${response.status}. The server might be down or file doesn't exist.`);
+      }
+      const text = await response.text();
+      await loadCubeFromData(text);
+    } catch (err) {
+      console.error(err);
+      alert(`Failed to load PQR orbital: ${err.message}`);
+      setLoadingState(false);
+    }
+  }
+
+  // Load Gaussian Cube data
+  async function loadCubeFromData(cubeText) {
+    setLoadingState(true);
+    try {
+      await viewer.plugin.clear();
+      while (viewer.plugin.isBusy) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+
+      const provider = viewer.plugin.dataFormats.get('cube');
+      if (!provider) {
+        throw new Error('Cube data provider not found in MolStar plugin.');
+      }
+
+      const rawData = await viewer.plugin.builders.data.rawData({ data: cubeText, label: 'Orbital Cube Data' });
+      const parsed = await provider.parse(viewer.plugin, rawData);
+
+      if (parsed.structure) {
+        await viewer.plugin.builders.structure.representation.applyPreset(parsed.structure, 'auto');
+      }
+
+      const volumeNode = parsed.volume;
+      if (volumeNode && volumeNode.cell && volumeNode.cell.obj) {
+        orbitalVolumeData = volumeNode.cell.obj.data;
+        const volumeData = orbitalVolumeData;
+
+        const surfaces = viewer.plugin.build();
+        const relativeVal = parseFloat(document.getElementById('orbital-isovalue').value);
+
+        const StateTransforms = molstar.lib.plugin.StateTransforms;
+        const Volume = molstar.lib.volume.Volume;
+
+        orbitalVolumePosNode = surfaces.to(volumeNode).apply(StateTransforms.Representation.VolumeRepresentation3D, {
+          type: {
+            name: 'isosurface',
+            params: {
+              isoValue: Volume.IsoValue.relative(relativeVal),
+              alpha: 0.4,
+            }
+          },
+          colorTheme: {
+            name: 'uniform',
+            params: { value: 0x00aaff }
+          },
+          sizeTheme: { name: 'physical', params: {} }
+        }, { tags: ['orbital-pos'] }).selector;
+
+        orbitalVolumeNegNode = surfaces.to(volumeNode).apply(StateTransforms.Representation.VolumeRepresentation3D, {
+          type: {
+            name: 'isosurface',
+            params: {
+              isoValue: Volume.IsoValue.relative(-relativeVal),
+              alpha: 0.4,
+            }
+          },
+          colorTheme: {
+            name: 'uniform',
+            params: { value: 0xff3333 }
+          },
+          sizeTheme: { name: 'physical', params: {} }
+        }, { tags: ['orbital-neg'] }).selector;
+
+        await surfaces.commit();
+        await updateOrbitalVisibility();
+      }
+
+      try {
+        viewer.plugin.managers.camera.reset();
+      } catch (e) {
+        console.warn('Camera reset error', e);
+      }
+
+      document.getElementById('orbital-controls').style.display = 'flex';
+      exportPanel.style.display = 'flex';
+      btnSTL.disabled = btnOBJ.disabled = btnGLB.disabled = false;
+      setLoadingState(false);
+    } catch (err) {
+      console.error('Failed to load Cube format:', err);
+      alert('Failed to load orbital cube data: ' + err.message);
+      setLoadingState(false);
+    }
+  }
+
+  // Update Isovalue in representations
+  async function updateOrbitalIsovalue(value) {
+    if (!orbitalVolumePosNode || !orbitalVolumeNegNode) return;
+
+    const Volume = molstar.lib.volume.Volume;
+    const update = viewer.plugin.build();
+
+    update.to(orbitalVolumePosNode).update(oldParams => {
+      if (oldParams && oldParams.type && oldParams.type.params) {
+        oldParams.type.params.isoValue = Volume.IsoValue.relative(value);
+      }
+      return oldParams;
+    });
+
+    update.to(orbitalVolumeNegNode).update(oldParams => {
+      if (oldParams && oldParams.type && oldParams.type.params) {
+        oldParams.type.params.isoValue = Volume.IsoValue.relative(-value);
+      }
+      return oldParams;
+    });
+
+    await update.commit();
+  }
+
+  // Update visibility
+  async function updateOrbitalVisibility() {
+    const togglePos = document.getElementById('toggle-positive').checked;
+    const toggleNeg = document.getElementById('toggle-negative').checked;
+
+    const update = viewer.plugin.build();
+    if (orbitalVolumePosNode) {
+      update.to(orbitalVolumePosNode).updateState({ isHidden: !togglePos });
+    }
+    if (orbitalVolumeNegNode) {
+      update.to(orbitalVolumeNegNode).updateState({ isHidden: !toggleNeg });
+    }
+    await update.commit();
+  }
+
+  // Bind controls
+  const orbitalIsovalueSlider = document.getElementById('orbital-isovalue');
+  const orbitalIsovalueVal = document.getElementById('isovalue-val');
+  const togglePosCheckbox = document.getElementById('toggle-positive');
+  const toggleNegCheckbox = document.getElementById('toggle-negative');
+
+  orbitalIsovalueSlider.addEventListener('input', (e) => {
+    const val = parseFloat(e.target.value);
+    orbitalIsovalueVal.textContent = val.toFixed(2);
+    updateOrbitalIsovalue(val);
+  });
+
+  togglePosCheckbox.addEventListener('change', () => {
+    updateOrbitalVisibility();
+  });
+
+  toggleNegCheckbox.addEventListener('change', () => {
+    updateOrbitalVisibility();
+  });
+
+  // Sidebar Collapse/Expand Logic
+  const sidebar = document.querySelector('.sidebar');
+  const sidebarToggle = document.getElementById('sidebar-toggle');
+  if (sidebar && sidebarToggle) {
+    if (window.innerWidth <= 768) {
+      sidebar.classList.add('collapsed');
+      sidebarToggle.textContent = '❯';
+    }
+
+    sidebarToggle.addEventListener('click', () => {
+      const isCollapsed = sidebar.classList.toggle('collapsed');
+      sidebarToggle.textContent = isCollapsed ? '❯' : '❮';
+      sidebarToggle.setAttribute('aria-expanded', !isCollapsed);
+
+      // Trigger resize for smooth canvas updates during CSS transition
+      let startTime = performance.now();
+      function tick(time) {
+        window.dispatchEvent(new Event('resize'));
+        if (time - startTime < 350) {
+          requestAnimationFrame(tick);
+        }
+      }
+      requestAnimationFrame(tick);
+    });
   }
 })();
