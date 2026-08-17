@@ -122,13 +122,22 @@ export class GeometryControls extends PluginComponent {
                     return { blob, filename: passFilename + '.' + renderObjectExporter.fileExtension };
                 };
 
+                // Wait for any ongoing tasks to finish before starting
+                while (this.plugin.behaviors.state.isBusy.value) {
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                }
+
                 // 1. Export Protein Only
                 let proteinResult: { blob: Blob, filename: string } | null = null;
                 try {
                     const update = state.build();
                     supportReps.forEach(r => update.to(r.transform.ref).updateState({ isHidden: true }));
-                    proteinReps.forEach(r => update.to(r.transform.ref).updateState({ isHidden: false }));
                     await update.commit();
+
+                    while (this.plugin.behaviors.state.isBusy.value) {
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 100));
 
                     proteinResult = await runExportPass(`${cleanName}_protein`);
                 } catch (e) {
@@ -138,10 +147,24 @@ export class GeometryControls extends PluginComponent {
                 // 2. Export Stand Only
                 let standResult: { blob: Blob, filename: string } | null = null;
                 try {
+                    // Find all representation cells in the state tree
+                    const allReps = cells.filter(c => 
+                        c.transform.transformer.id.endsWith('structure-representation-3d') ||
+                        c.transform.transformer.id.endsWith('volume-representation-3d') ||
+                        c.transform.transformer.id.endsWith('shape-representation-3d')
+                    );
+                    const supportRefRefs = supportReps.map(r => r.transform.ref);
+                    const repsToHide = allReps.filter(r => !supportRefRefs.includes(r.transform.ref));
+
                     const update = state.build();
                     supportReps.forEach(r => update.to(r.transform.ref).updateState({ isHidden: false }));
-                    proteinReps.forEach(r => update.to(r.transform.ref).updateState({ isHidden: true }));
+                    repsToHide.forEach(r => update.to(r.transform.ref).updateState({ isHidden: true }));
                     await update.commit();
+
+                    while (this.plugin.behaviors.state.isBusy.value) {
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 100));
 
                     standResult = await runExportPass(`${cleanName}_stand`);
                 } catch (e) {
@@ -152,8 +175,18 @@ export class GeometryControls extends PluginComponent {
                 try {
                     const update = state.build();
                     supportReps.forEach(r => update.to(r.transform.ref).updateState({ isHidden: false }));
-                    proteinReps.forEach(r => update.to(r.transform.ref).updateState({ isHidden: false }));
+                    const allReps = cells.filter(c => 
+                        c.transform.transformer.id.endsWith('structure-representation-3d') ||
+                        c.transform.transformer.id.endsWith('volume-representation-3d') ||
+                        c.transform.transformer.id.endsWith('shape-representation-3d')
+                    );
+                    allReps.forEach(r => update.to(r.transform.ref).updateState({ isHidden: false }));
                     await update.commit();
+
+                    while (this.plugin.behaviors.state.isBusy.value) {
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 100));
                 } catch (e) {
                     console.error('Failed to restore visibilities:', e);
                 }

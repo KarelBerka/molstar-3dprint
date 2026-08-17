@@ -21,6 +21,7 @@ export const StrutsParams = {
     ligandStruts: PD.Boolean(true, { description: 'Connect ligands to nearby backbone atoms' }),
     ligandStrutLengthMax: PD.Numeric(10.0, { min: 1, max: 20, step: 0.1 }, { description: 'Maximum ligand strut length (Å)' }),
     color: PD.Color(ColorNames.orange, { description: 'Color of the support struts' }),
+    standColor: PD.Color(ColorNames.grey, { description: 'Color of the stand/pedestal' }),
     showStand: PD.Boolean(false, { description: 'Generate a base stand/pedestal' }),
     standAlignToView: PD.Boolean(true, { description: 'Align stand to current camera view' }),
     standThickness: PD.Numeric(3.0, { min: 1.0, max: 10.0, step: 0.5 }, { description: 'Stand plate thickness (Å)' }),
@@ -431,7 +432,7 @@ function getStrutsShape(data: StrutsData): Shape<Mesh> {
 }
 
 function getStandBaseShape(data: StrutsData): Shape<Mesh> {
-    const color = data.props.color;
+    const color = data.props.standColor;
     let totalBoxes = data.textTransforms ? data.textTransforms.length : 0;
     const vertexCount = (data.standBase ? 64 : 0) + totalBoxes * 8;
     const triangleCount = (data.standBase ? 64 : 0) + totalBoxes * 12;
@@ -452,7 +453,7 @@ function getStandBaseShape(data: StrutsData): Shape<Mesh> {
 }
 
 function getStandPillarsShape(data: StrutsData): Shape<Mesh> {
-    const color = data.props.color;
+    const color = data.props.standColor;
     const pillars = data.standPillars || [];
     const state = MeshBuilder.createState(pillars.length * 64, pillars.length * 64);
     for (const p of pillars) {
