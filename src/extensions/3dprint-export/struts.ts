@@ -24,7 +24,7 @@ export const StrutsParams = {
     standColor: PD.Color(ColorNames.grey, { description: 'Color of the stand/pedestal' }),
     showStand: PD.Boolean(false, { description: 'Generate a base stand/pedestal' }),
     standAlignToView: PD.Boolean(true, { description: 'Align stand to current camera view' }),
-    standThickness: PD.Numeric(3.0, { min: 1.0, max: 10.0, step: 0.5 }, { description: 'Stand plate thickness (Å)' }),
+    standThickness: PD.Numeric(4.0, { min: 1.0, max: 15.0, step: 0.5 }, { description: 'Stand plate thickness (Å)' }),
     standOffset: PD.Numeric(10.0, { min: -20.0, max: 30.0, step: 1.0 }, { description: 'Distance below molecule (Å)' }),
     standPadding: PD.Numeric(6.0, { min: 2.0, max: 20.0, step: 1.0 }, { description: 'Horizontal margin around stand (Å)' }),
     standPillarRadius: PD.Numeric(0.8, { min: 0.2, max: 3.0, step: 0.1 }, { description: 'Radius of stand support pillars (Å)' }),
@@ -345,7 +345,25 @@ function generateCircumferenceText(
     const W = charWidth + charSpacing;
     const dTheta = W / standRadius;
 
+    const isEngrave = depth < 0;
     const absDepth = Math.abs(depth);
+    // Deep penetration into the cylinder wall ensures zero gap between text and stand cylinder,
+    // bridging any polygonal faceting and providing solid infill bond for 3D printing.
+    const embedDepth = Math.max(1.5, pixelSize * 1.2);
+    const protrusion = Math.max(0.4, absDepth);
+
+    let boxDepth: number;
+    let rCenter: number;
+    if (isEngrave) {
+        boxDepth = absDepth + 0.4;
+        rCenter = standRadius - absDepth / 2 + 0.2;
+    } else {
+        boxDepth = protrusion + embedDepth;
+        rCenter = standRadius + (protrusion - embedDepth) / 2;
+    }
+
+    const pixelScaleX = pixelSize * 1.06;
+    const pixelScaleY = pixelSize * 1.06;
 
     for (let charIdx = 0; charIdx < L; ++charIdx) {
         const char = cleanText[charIdx];
@@ -386,13 +404,13 @@ function generateCircumferenceText(
                     const pixelPos = Vec3.zero();
                     if (isAlignedToView) {
                         const standCenterY = centerY + standThickness / 2;
-                        pixelPos[0] = centerX + (standRadius + depth / 2) * cosT + dx * sinT;
+                        pixelPos[0] = centerX + rCenter * cosT + dx * sinT;
                         pixelPos[1] = standCenterY + dy;
-                        pixelPos[2] = centerZ + (standRadius + depth / 2) * sinT + dx * (-cosT);
+                        pixelPos[2] = centerZ + rCenter * sinT + dx * (-cosT);
                     } else {
                         const standCenterZ = centerZ + standThickness / 2;
-                        pixelPos[0] = centerX + (standRadius + depth / 2) * cosT + dx * (-sinT);
-                        pixelPos[1] = centerY + (standRadius + depth / 2) * sinT + dx * cosT;
+                        pixelPos[0] = centerX + rCenter * cosT + dx * (-sinT);
+                        pixelPos[1] = centerY + rCenter * sinT + dx * cosT;
                         pixelPos[2] = standCenterZ + dy;
                     }
 
@@ -403,7 +421,7 @@ function generateCircumferenceText(
 
                     const localMat = Mat4.fromTranslation(Mat4(), pixelPos);
                     Mat4.mul(localMat, localMat, rMat);
-                    Mat4.scale(localMat, localMat, Vec3.create(pixelSize, pixelSize, absDepth));
+                    Mat4.scale(localMat, localMat, Vec3.create(pixelScaleX, pixelScaleY, boxDepth));
 
                     if (isAlignedToView && invViewMat) {
                         matrices.push(Mat4.mul(Mat4(), invViewMat, localMat));
@@ -434,11 +452,11 @@ function getStrutsShape(data: StrutsData): Shape<Mesh> {
 function getStandBaseShape(data: StrutsData): Shape<Mesh> {
     const color = data.props.standColor;
     let totalBoxes = data.textTransforms ? data.textTransforms.length : 0;
-    const vertexCount = (data.standBase ? 64 : 0) + totalBoxes * 8;
-    const triangleCount = (data.standBase ? 64 : 0) + totalBoxes * 12;
+    const vertexCount = (data.standBase ? 256 : 0) + totalBoxes * 8;
+    const triangleCount = (data.standBase ? 256 : 0) + totalBoxes * 12;
     const state = MeshBuilder.createState(vertexCount, triangleCount);
     if (data.standBase) {
-        const baseProps = { radiusTop: data.standBase.radius, radiusBottom: data.standBase.radius, radialSegments: 32, topCap: true, bottomCap: true };
+        const baseProps = { radiusTop: data.standBase.radius, radiusBottom: data.standBase.radius, radialSegments: 64, topCap: true, bottomCap: true };
         addCylinder(state, data.standBase.start, data.standBase.end, 1, baseProps);
     }
     if (data.textTransforms) {
@@ -558,8 +576,14 @@ const StrutsShapeProvider = {
                         }
                     }
 
+                    const charH = props.standTextFont === '5x7' ? 7 : 5;
+                    const minThickness = (charH + 1) * props.standTextSize;
+                    const effectiveThickness = (props.standText && props.standText.trim().length > 0)
+                        ? Math.max(props.standThickness, minThickness)
+                        : props.standThickness;
+
                     const standTopY = minY - props.standOffset;
-                    const standBottomY = standTopY - props.standThickness;
+                    const standBottomY = standTopY - effectiveThickness;
 
                     let maxDist = 0;
                     for (const item of selected) {
@@ -604,7 +628,7 @@ const StrutsShapeProvider = {
                             standBottomY,
                             centerZ,
                             standRadius,
-                            props.standThickness,
+                            effectiveThickness,
                             props.standTextSize,
                             props.standTextDepth,
                             true,
@@ -658,8 +682,14 @@ const StrutsShapeProvider = {
                         }
                     }
 
+                    const charH = props.standTextFont === '5x7' ? 7 : 5;
+                    const minThickness = (charH + 1) * props.standTextSize;
+                    const effectiveThickness = (props.standText && props.standText.trim().length > 0)
+                        ? Math.max(props.standThickness, minThickness)
+                        : props.standThickness;
+
                     const standTopZ = minZ - props.standOffset;
-                    const standBottomZ = standTopZ - props.standThickness;
+                    const standBottomZ = standTopZ - effectiveThickness;
 
                     let maxDist = 0;
                     for (const pos of selected) {
@@ -699,7 +729,7 @@ const StrutsShapeProvider = {
                             centerY,
                             standBottomZ,
                             standRadius,
-                            props.standThickness,
+                            effectiveThickness,
                             props.standTextSize,
                             props.standTextDepth,
                             false,
