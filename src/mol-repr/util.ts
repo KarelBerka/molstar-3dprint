@@ -7,11 +7,12 @@
 import { defaults } from '../mol-util';
 import { Structure } from '../mol-model/structure';
 import { VisualQuality } from '../mol-geo/geometry/base';
-import { Box3D, SpacegroupCell } from '../mol-math/geometry';
+import { Box3D } from '../mol-math/geometry';
 import { ModelSymmetry } from '../mol-model-formats/structure/property/symmetry';
 import { Volume } from '../mol-model/volume';
 import { Location } from '../mol-model/location';
 import { isStandaloneHmd } from '../mol-util/browser';
+import { Particle, ParticleList } from '../mol-model/particles/particle-list';
 
 export interface VisualUpdateState {
     updateTransform: boolean
@@ -102,10 +103,7 @@ function visualQualityToLevel(quality: Exclude<VisualQuality, 'auto' | 'custom'>
     }
 }
 
-export function getStructureQuality(structure: Structure, tresholds: Partial<QualityThresholds> = {}): VisualQuality {
-    const t = { ...DefaultQualityThresholds, ...tresholds };
-    let score = structure.elementCount * t.elementCountFactor;
-    if (structure.isCoarseGrained || structure.isCoarse) score *= t.coarseGrainedFactor;
+function getQualityFromScore(score: number, t: QualityThresholds): VisualQuality {
     if (score > t.lowestElementCount) {
         return 'lowest';
     } else if (score > t.lowerElementCount) {
@@ -121,19 +119,35 @@ export function getStructureQuality(structure: Structure, tresholds: Partial<Qua
     }
 }
 
+export function getStructureQuality(structure: Structure, tresholds: Partial<QualityThresholds> = {}): VisualQuality {
+    const t = { ...DefaultQualityThresholds, ...tresholds };
+    let score = structure.elementCount * t.elementCountFactor;
+    if (structure.isCoarseGrained || structure.isCoarse) score *= t.coarseGrainedFactor;
+    return getQualityFromScore(score, t);
+}
+
+export function getParticleListQuality(particles: ParticleList, tresholds: Partial<QualityThresholds> = {}): VisualQuality {
+    const t = { ...DefaultQualityThresholds, ...tresholds };
+    const score = particles.count * t.elementCountFactor;
+    return getQualityFromScore(score, t);
+}
+
 /**
- * Uses cell volume to avoid costly boundary calculation if
- * - single model
- * - non-empty 'P 1' spacegroup
+ * Uses cell volume divided by the number of symmetry operators to avoid
+ * costly boundary calculation if a single model with a non-empty cell.
  */
 function getRootVolume(structure: Structure) {
     if (structure.root.models.length === 1) {
-        const sym = ModelSymmetry.Provider.get(structure.root.model);
-        if (sym && sym.spacegroup.name === 'P 1' && !SpacegroupCell.isZero(sym.spacegroup.cell)) {
-            return sym.spacegroup.cell.volume;
+        const cell = ModelSymmetry.Provider.get(structure.root.model)?.spacegroup.cell;
+        if (cell && cell.volume > 0) {
+            return cell.volume / cell.order;
         }
     }
     return Box3D.volume(structure.root.boundary.box);
+}
+
+function getParticleListVolume(particles: ParticleList) {
+    return particles.cell?.volume ?? Box3D.volume(Particle.getBoundary(particles).box);
 }
 
 export function getQualityProps(props: Partial<QualityProps>, data?: any) {
@@ -155,6 +169,9 @@ export function getQualityProps(props: Partial<QualityProps>, data?: any) {
             const [x, y, z] = data.grid.cells.space.dimensions;
             volume = x * y * z;
             quality = volume < 10_000_000 ? 'medium' : 'low';
+        } else if (Particle.is(data)) {
+            quality = getParticleListQuality(data);
+            volume = getParticleListVolume(data);
         }
     }
 

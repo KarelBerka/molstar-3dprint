@@ -233,13 +233,23 @@ export namespace ParamDefinition {
         return setInfo<Interval>(setRange({ type: 'interval', defaultValue }, range), info);
     }
 
+    export interface LineGraphYAxis {
+        scale?: 'linear' | 'log',
+        /** Lower bound for log scale (alpha values below this are clamped for display only). Default 1e-3. */
+        logMin?: number
+    }
     export interface LineGraph extends Base<Vec2Data[]> {
         type: 'line-graph',
-        getVolume?: () => unknown
+        getVolume?: () => unknown,
+        yAxis?: LineGraphYAxis,
+        /** Optional preset provider. Called lazily when the user opens the presets menu so presets can be derived from current data (e.g. volume stats). */
+        getPresets?: () => Select<Vec2Data[]>['options']
     }
-    export function LineGraph(defaultValue: Vec2Data[], info?: Info & { getVolume?: (binCount?: number) => unknown }): LineGraph {
+    export function LineGraph(defaultValue: Vec2Data[], info?: Info & { getVolume?: () => unknown, yAxis?: LineGraphYAxis, getPresets?: () => Select<Vec2Data[]>['options'] }): LineGraph {
         const ret = setInfo<LineGraph>({ type: 'line-graph', defaultValue }, info);
         if (info?.getVolume) ret.getVolume = info.getVolume;
+        if (info?.yAxis) ret.yAxis = info.yAxis;
+        if (info?.getPresets) ret.getPresets = info.getPresets;
         return ret;
     }
 
@@ -306,27 +316,34 @@ export namespace ParamDefinition {
     }
     function _defaultObjectListCtor(this: ObjectList) { return getDefaultValues(this.element) as any; }
 
-
     function unsetGetValue() {
         throw new Error('getValue not set. Fix runtime.');
     }
 
+    export interface Ref<T = any> {
+        ref: string,
+        getValue: () => T
+    }
+    export function Ref<T>(ref = ''): Ref<T> {
+        return { ref, getValue: unsetGetValue as any };
+    }
+
     // getValue needs to be assigned by a runtime because it might not be serializable
-    export interface ValueRef<T = any> extends Base<{ ref: string, getValue: () => T }> {
+    export interface ValueRef<T = any> extends Base<Ref<T>> {
         type: 'value-ref',
         resolveRef: (ref: string, getData: (ref: string) => any) => T,
         // a provider because the list changes over time
         getOptions: (ctx: any) => Select<string>['options'],
     }
     export function ValueRef<T>(getOptions: ValueRef['getOptions'], resolveRef: ValueRef<T>['resolveRef'], info?: Info & { defaultRef?: string }) {
-        return setInfo<ValueRef<T>>({ type: 'value-ref', defaultValue: { ref: info?.defaultRef ?? '', getValue: unsetGetValue as any }, getOptions, resolveRef }, info);
+        return setInfo<ValueRef<T>>({ type: 'value-ref', defaultValue: Ref(info?.defaultRef), getOptions, resolveRef }, info);
     }
 
-    export interface DataRef<T = any> extends Base<{ ref: string, getValue: () => T }> {
+    export interface DataRef<T = any> extends Base<Ref<T>> {
         type: 'data-ref'
     }
     export function DataRef<T>(info?: Info & { defaultRef?: string }) {
-        return setInfo<DataRef<T>>({ type: 'data-ref', defaultValue: { ref: info?.defaultRef ?? '', getValue: unsetGetValue as any } }, info);
+        return setInfo<DataRef<T>>({ type: 'data-ref', defaultValue: Ref(info?.defaultRef) }, info);
     }
 
     export interface Converted<T, C> extends Base<T> {

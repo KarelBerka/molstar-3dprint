@@ -6,6 +6,11 @@ export const assign_material_color = `
     }
 #endif
 
+// optional per-fragment opacity multiplier; defaults to 1.0
+#ifndef dHasMaterialOpacity
+    float materialOpacity = 1.0;
+#endif
+
 #if defined(dRenderVariant_color) || defined(dRenderVariant_tracing)
     #if defined(dUsePalette)
         vec4 material = vec4(texture2D(tPalette, vec2(vPaletteV, 0.5)).rgb, uAlpha);
@@ -53,17 +58,17 @@ export const assign_material_color = `
                 if (vTransparency < 0.1) dta = 1.0; // hard cutoff to avoid artifacts
             #endif
 
-            if (uAlpha * dta < 1.0) {
+            if (uAlpha * materialOpacity * dta < 1.0) {
                 discard;
             }
         #else
-            if (uAlpha < 1.0) {
+            if (uAlpha * materialOpacity < 1.0) {
                 discard;
             }
         #endif
         material = packDepthToRGBA(fragmentDepth);
     } else if (uRenderMask == MaskTransparent) {
-        float alpha = uAlpha;
+        float alpha = uAlpha * materialOpacity;
         #if defined(dTransparency)
             float dta = 1.0 - vTransparency;
             alpha *= dta;
@@ -77,41 +82,52 @@ export const assign_material_color = `
             }
         #endif
         material = packDepthWithAlphaToRGBA(fragmentDepth, alpha);
+    } else {
+        material = packDepthToRGBA(fragmentDepth);
     }
 #elif defined(dRenderVariant_marking)
-    vec4 material;
-    if(uMarkingType == 1) {
-        if (marker > 0.0)
-            discard;
-        #ifdef enabledFragDepth
-            material = packDepthToRGBA(gl_FragDepthEXT);
-        #else
-            material = packDepthToRGBA(gl_FragCoord.z);
-        #endif
-    } else {
-        if (marker == 0.0)
-            discard;
-        float depthTest = 1.0;
-        if (uMarkingDepthTest) {
-            depthTest = (fragmentDepth >= getDepthPacked(gl_FragCoord.xy / uDrawingBufferSize)) ? 1.0 : 0.0;
-        }
-        bool isHighlight = intMod(marker, 2.0) > 0.1;
-        float viewZ = depthToViewZ(uIsOrtho, fragmentDepth, uNear, uFar);
-        float fogFactor = smoothstep(uFogNear, uFogFar, abs(viewZ));
-        if (fogFactor == 1.0)
-            discard;
-        material = vec4(0.0, depthTest, isHighlight ? 1.0 : 0.0, 1.0 - fogFactor);
-    }
+    vec4 material = vec4(0.0, 0.0, 0.0, uAlpha * materialOpacity);
+    #if defined(dXrayShaded)
+        material.a = calcXrayShadedAlpha(material.a, normal);
+    #endif
 #elif defined(dRenderVariant_emissive)
     float emissive = uEmissive;
     #ifdef dEmissive
         emissive += vEmissive;
     #endif
-    vec4 material = vec4(emissive);
+    float emissiveAlpha = uAlpha;
+    #if defined(dXrayShaded)
+        emissiveAlpha = calcXrayShadedAlpha(emissiveAlpha, normal);
+    #endif
+    // fade emissive bloom with fog so the glow dims into the background like the geometry
+    if (uFog) {
+        float viewZ = depthToViewZ(uIsOrtho, fragmentDepth, uNear, uFar);
+        emissiveAlpha *= 1.0 - smoothstep(uFogNear, uFogFar, abs(viewZ));
+    }
+    // dim emitters behind a transparent blocker by its coverage (tDepth packs front depth+alpha)
+    vec2 emissiveBlocker = unpackRGBAToDepthWithAlpha(texture2D(tDepth, gl_FragCoord.xy / uDrawingBufferSize));
+    if (fragmentDepth > emissiveBlocker.x + 0.0001) {
+        emissiveAlpha *= 1.0 - emissiveBlocker.y;
+    }
+    // glow with the object's own color so emissive isn't double-counted via the lit buffer
+    #if defined(dUsePalette)
+        vec3 emissiveColor = texture2D(tPalette, vec2(vPaletteV, 0.5)).rgb;
+    #elif defined(dColorType_uniform)
+        vec3 emissiveColor = uColor;
+    #elif defined(dColorType_varying)
+        vec3 emissiveColor = vColor.rgb;
+    #else
+        vec3 emissiveColor = vec3(1.0);
+    #endif
+    #ifdef dOverpaint
+        emissiveColor = mix(emissiveColor, vOverpaint.rgb, vOverpaint.a);
+    #endif
+    float e = emissive * emissiveAlpha;
+    vec4 material = vec4(emissiveColor * e, e);
 #endif
 
 // apply per-group transparency
-#if defined(dTransparency) && (defined(dRenderVariant_pick) || defined(dRenderVariant_color) || defined(dRenderVariant_emissive) || defined(dRenderVariant_tracing))
+#if defined(dTransparency) && (defined(dRenderVariant_pick) || defined(dRenderVariant_color) || defined(dRenderVariant_emissive) || defined(dRenderVariant_tracing) || defined(dRenderVariant_marking))
     float ta = 1.0 - vTransparency;
     if (vTransparency < 0.09) ta = 1.0; // hard cutoff looks better
 
@@ -119,9 +135,8 @@ export const assign_material_color = `
         if (ta * uAlpha < uPickingAlphaThreshold)
             discard; // ignore so the element below can be picked
     #elif defined(dRenderVariant_emissive)
-        if (ta < 1.0)
-            discard; // emissive not supported with transparency
-    #elif defined(dRenderVariant_color) || defined(dRenderVariant_tracing)
+        material *= ta;
+    #elif defined(dRenderVariant_color) || defined(dRenderVariant_tracing) || defined(dRenderVariant_marking)
         material.a *= ta;
     #endif
 #endif

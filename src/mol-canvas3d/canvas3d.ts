@@ -5,56 +5,60 @@
  * @author David Sehnal <david.sehnal@gmail.com>
  * @author Gianluca Tomasello <giagitom@gmail.com>
  * @author Herman Bergwerf <post@hbergwerf.nl>
+ * @author Adam Midlik <midlik@gmail.com>
  */
 
 import { BehaviorSubject, Subject, Subscription, debounceTime, merge } from 'rxjs';
-import { now } from '../mol-util/now';
-import { Vec3, Vec2 } from '../mol-math/linear-algebra';
-import { InputObserver, ModifiersKeys, ButtonsType } from '../mol-util/input/input-observer';
-import { Renderer, RendererStats, RendererParams } from '../mol-gl/renderer';
-import { GraphicsRenderObject } from '../mol-gl/render-object';
-import { DefaultTrackballControlsAttribs, TrackballControls, TrackballControlsParams } from './controls/trackball';
-import { Viewport } from './camera/util';
-import { createContext, WebGLContext, getGLContext } from '../mol-gl/webgl/context';
-import { Representation } from '../mol-repr/representation';
-import { Scene } from '../mol-gl/scene';
 import { PickingId } from '../mol-geo/geometry/picking';
-import { MarkerAction } from '../mol-util/marker-action';
-import { Loci, EmptyLoci, isEmptyLoci } from '../mol-model/loci';
-import { Camera } from './camera';
-import { ParamDefinition as PD } from '../mol-util/param-definition';
-import { DebugRegistry } from './helper/debug-registry';
-import { SetUtils } from '../mol-util/set';
-import { Canvas3dInteractionHelper, Canvas3dInteractionHelperParams } from './helper/interaction-events';
-import { PostprocessingParams } from './passes/postprocessing';
-import { MultiSampleHelper, MultiSampleParams, MultiSamplePass } from './passes/multi-sample';
-import { AsyncPickData, DefaultPickOptions, PickData } from './passes/pick';
-import { PickHelper } from './helper/pick-helper';
-import { ImagePass, ImageProps } from './passes/image';
+import { GraphicsRenderObject } from '../mol-gl/render-object';
+import { Frame, createFrame } from '../mol-gl/renderable';
+import { Renderer, RendererParams, RendererStats } from '../mol-gl/renderer';
+import { Scene } from '../mol-gl/scene';
+import { WebGLContext, createContext, getGLContext } from '../mol-gl/webgl/context';
+import { EasingFunction, EasingParamDefinition } from '../mol-math/easing';
 import { Sphere3D } from '../mol-math/geometry';
-import { addConsoleStatsProvider, isDebugMode, isTimingMode, removeConsoleStatsProvider } from '../mol-util/debug';
-import { CameraHelperParams } from './helper/camera-helper';
-import { HandleHelperParams } from './helper/handle-helper';
-import { StereoCamera, StereoCameraParams } from './camera/stereo';
-import { Helper } from './helper/helper';
-import { Passes } from './passes/passes';
-import { shallowEqual } from '../mol-util';
-import { MarkingParams } from './passes/marking';
+import { Ray3D } from '../mol-math/geometry/primitives/ray3d';
+import { Vec2, Vec3 } from '../mol-math/linear-algebra';
 import { degToRad, radToDeg } from '../mol-math/misc';
+import { EmptyLoci, Loci, isEmptyLoci } from '../mol-model/loci';
+import { Representation } from '../mol-repr/representation';
+import { shallowEqual } from '../mol-util';
 import { AssetManager } from '../mol-util/assets';
+import { isMobileBrowser } from '../mol-util/browser';
+import { addConsoleStatsProvider, isDebugMode, isTimingMode, removeConsoleStatsProvider } from '../mol-util/debug';
+import { ButtonsType, InputObserver, ModifiersKeys } from '../mol-util/input/input-observer';
+import { MarkerAction } from '../mol-util/marker-action';
+import { now } from '../mol-util/now';
+import { toFixed } from '../mol-util/number';
 import { deepClone } from '../mol-util/object';
+import { ParamDefinition as PD } from '../mol-util/param-definition';
+import { produce } from '../mol-util/produce';
+import { SetUtils } from '../mol-util/set';
+import { Camera } from './camera';
+import { StereoCamera, StereoCameraParams } from './camera/stereo';
+import type { CameraTransitionManager } from './camera/transition';
+import { TransitionTrajectoryParamDefinition, type TransitionTrajectory } from './camera/transition-functions';
+import { Viewport } from './camera/util';
+import { DefaultTrackballControlsAttribs, TrackballControls, TrackballControlsParams } from './controls/trackball';
+import { CameraHelperParams } from './helper/camera-helper';
+import { DebugRegistry } from './helper/debug-registry';
+import { HandleHelperParams } from './helper/handle-helper';
+import { Helper } from './helper/helper';
+import { Canvas3dInteractionHelper, Canvas3dInteractionHelperParams } from './helper/interaction-events';
+import { PickHelper } from './helper/pick-helper';
+import { PointerHelperParams } from './helper/pointer-helper';
+import { RayHelper } from './helper/ray-helper';
+import { ShaderManager } from './helper/shader-manager';
+import { DefaultXRManagerAttribs, XRManager, XRManagerParams } from './helper/xr-manager';
 import { HiZParams, HiZPass } from './passes/hi-z';
 import { IlluminationParams } from './passes/illumination';
-import { isMobileBrowser } from '../mol-util/browser';
-import { PointerHelperParams } from './helper/pointer-helper';
-import { DefaultXRManagerAttribs, XRManager, XRManagerParams } from './helper/xr-manager';
-import { Ray3D } from '../mol-math/geometry/primitives/ray3d';
-import { RayHelper } from './helper/ray-helper';
-import { produce } from '../mol-util/produce';
-import { ShaderManager } from './helper/shader-manager';
-import { toFixed } from '../mol-util/number';
-import type { CameraTransitionManager } from './camera/transition';
-import { EasingFunction } from '../mol-math/easing';
+import { ImagePass, ImageProps } from './passes/image';
+import { isMaterialColorMarker, MarkingParams, SingleSample } from './passes/marking';
+import { MultiSampleHelper, MultiSampleParams, MultiSamplePass } from './passes/multi-sample';
+import { getJitterOffsets, getTemporalSamplesPerFrame } from './passes/jitter';
+import { Passes } from './passes/passes';
+import { AsyncPickData, DefaultPickOptions, PickData } from './passes/pick';
+import { PostprocessingParams } from './passes/postprocessing';
 
 export const CameraFogParams = {
     intensity: PD.Numeric(15, { min: 1, max: 100, step: 1 }),
@@ -96,6 +100,8 @@ export const Canvas3DParams = {
     }),
 
     cameraResetDurationMs: PD.Numeric(250, { min: 0, max: 1000, step: 1 }, { description: 'The time it takes to reset the camera.' }),
+    cameraResetEasing: EasingParamDefinition('linear'),
+    cameraResetTrajectory: TransitionTrajectoryParamDefinition('linear'),
     sceneRadiusFactor: PD.Numeric(1, { min: 1, max: 10, step: 0.1 }),
     transparentBackground: PD.Boolean(false),
     checkeredTransparentBackground: PD.Boolean(false),
@@ -186,6 +192,7 @@ namespace Canvas3DContext {
             preserveDrawingBuffer,
             alpha: true, // the renderer requires an alpha channel
             depth: true, // the renderer requires a depth buffer
+            stencil: true, // the renderer requires a stencil buffer
             premultipliedAlpha: true, // the renderer outputs PMA
             preferWebGl1
         });
@@ -328,6 +335,7 @@ export interface Canvas3DCameraResetOptions {
     snapshot?: Camera.SnapshotProvider,
     keyframes?: CameraTransitionManager.TransitionKeyframes,
     easing?: EasingFunction,
+    trajectory?: TransitionTrajectory,
 }
 
 interface Canvas3D {
@@ -416,7 +424,9 @@ const cancelAnimationFrame = typeof window !== 'undefined'
     ? window.cancelAnimationFrame
     : (handle: number) => clearImmediate(handle as unknown as NodeJS.Immediate);
 
-function syncCanvasBackground(canvas: HTMLCanvasElement, canvasProps: Canvas3DProps) {
+function syncCanvasBackground(canvas: HTMLCanvasElement | undefined, canvasProps: Canvas3DProps) {
+    // A HeadlessPluginContext has no HTML canvas to style.
+    if (!canvas) return;
     if (canvasProps.transparentBackground && canvasProps.checkeredTransparentBackground) {
         Object.assign(canvas.style, {
             'background-image': 'linear-gradient(45deg, lightgrey 25%, transparent 25%, transparent 75%, lightgrey 75%, lightgrey), linear-gradient(45deg, lightgrey 25%, transparent 25%, transparent 75%, lightgrey 75%, lightgrey)',
@@ -461,11 +471,14 @@ namespace Canvas3D {
 
         let forceNextRender = false;
         let currentTime = 0;
+        // bumped once per render() call; spans stereo eyes and multi-sample jitter
+        // sub-renders of that call, so their cull results can be safely reused
+        let frame: Frame = createFrame();
 
-        syncCanvasBackground(canvas!, p);
+        syncCanvasBackground(canvas, p);
         updateViewport();
         const scene = Scene.create(webgl, passes.draw.transparency, {
-            dColorMarker: p.renderer.colorMarker,
+            dColorMarker: isMaterialColorMarker(p.renderer, p.marking),
             dLightCount: p.renderer.light?.length,
         });
 
@@ -512,6 +525,7 @@ namespace Canvas3D {
             snapshot: undefined,
             keyframes: undefined,
             easing: undefined,
+            trajectory: undefined,
         };
         let resizeRequested = false;
 
@@ -627,8 +641,12 @@ namespace Canvas3D {
             markBuffer.push([reprLoci, action]);
         }
 
+        /** helpers are rendered into the scene color, so their marking can't be redrawn on its own */
+        let helperMarkingUpdated = false;
+
         function resolveMarking() {
             let changed = false;
+            helperMarkingUpdated = false;
             for (const [r, l] of markBuffer) {
                 changed = applyMark(r, l) || changed;
             }
@@ -654,9 +672,11 @@ namespace Canvas3D {
             } else {
                 reprRenderObjects.forEach((_, _repr) => { changed = _repr.mark(loci, action) || changed; });
             }
-            changed = helper.handle.mark(loci, action) || changed;
-            changed = helper.camera.mark(loci, action) || changed;
-            return changed;
+            const handleChanged = helper.handle.mark(loci, action);
+            const cameraChanged = helper.camera.mark(loci, action);
+            const helperChanged = handleChanged || cameraChanged;
+            helperMarkingUpdated = helperMarkingUpdated || helperChanged;
+            return changed || helperChanged;
         }
 
         function render(force: boolean, xrFrame?: XRFrame) {
@@ -692,7 +712,40 @@ namespace Canvas3D {
             const shouldRender = force || cameraChanged || resized || forceNextRender || xrChanged || activeAnimation;
             forceNextRender = false;
 
-            if (passes.illumination.supported && p.illumination.enabled && !xrFrame) {
+            // only a new frameId when something that can affect culling actually changed, so idle
+            // ticks (e.g. temporal multi-sample accumulation on a resting camera) reuse the last cull
+            if (shouldRender) {
+                frame = createFrame();
+                if (isDebugMode) console.log('New frame');
+            }
+
+            const illuminationEnabled = passes.illumination.supported && p.illumination.enabled && !xrFrame;
+            const multiSampleEnabled = MultiSamplePass.isEnabled(p.multiSample) && !xrFrame;
+
+            const markingOffsets = (illuminationEnabled ? p.multiSample.mode === 'on' : multiSampleEnabled)
+                ? getJitterOffsets(p.multiSample.sampleLevel) : SingleSample;
+            const redrawMarking = (restart: boolean, samples: number) => {
+                // other passes (e.g. pick) reset this, it has to match the last full render
+                renderer.setOcclusionTest(illuminationEnabled ? null : hiZ.isOccluded);
+                if (isTimingMode) webgl.timer.mark('Canvas3D.render', { captureStats: true });
+                const redrawn = passes.draw.marking.redraw({ renderer, camera, scene, helper, frame }, p, markingOffsets, restart, samples);
+                if (isTimingMode) webgl.timer.markEnd('Canvas3D.render');
+                return redrawn;
+            };
+
+            // marking-only changes are redrawn over the image of the last render, avoiding a full
+            // re-render; the per-object color marker is part of that image, so it needs a re-render
+            const canRedrawMarking = !helperMarkingUpdated && !shouldRender
+                && !isMaterialColorMarker(renderer.props, p.marking) && !xrFrame && p.camera.stereo.name !== 'on'
+                && (!illuminationEnabled || passes.illumination.iteration > 0);
+
+            if (canRedrawMarking && markingUpdated) {
+                // illumination multi-samples are expensive (full depth pass each), so add them over frames
+                const progressive = illuminationEnabled || p.multiSample.mode === 'temporal';
+                if (redrawMarking(true, progressive ? 1 : markingOffsets.length)) return true;
+            }
+
+            if (illuminationEnabled) {
                 if (shouldRender || markingUpdated) {
                     renderer.setOcclusionTest(null);
                     passes.illumination.restart();
@@ -702,7 +755,7 @@ namespace Canvas3D {
                     && ((!isActivelyInteracting && scene.count > 0) || passes.illumination.iteration === 0 || p.userInteractionReleaseMs === 0)
                 ) {
                     if (isTimingMode) webgl.timer.mark('Canvas3D.render', { captureStats: true });
-                    const ctx = { renderer, camera, scene, helper };
+                    const ctx = { renderer, camera, scene, helper, frame };
                     passes.illumination.render(ctx, p, true);
                     if (isTimingMode) webgl.timer.markEnd('Canvas3D.render');
 
@@ -723,9 +776,10 @@ namespace Canvas3D {
                     }
 
                     if (isTimingMode) webgl.timer.mark('Canvas3D.render', { captureStats: true });
-                    const ctx = { renderer, camera: cam, scene, helper };
-                    if (MultiSamplePass.isEnabled(p.multiSample) && !xrFrame) {
-                        const forceOn = p.multiSample.reduceFlicker && !cameraChanged && markingUpdated && !controls.isAnimating;
+                    const ctx = { renderer, camera: cam, scene, helper, frame };
+                    if (multiSampleEnabled) {
+                        const forceOn = p.multiSample.reduceFlicker && isMaterialColorMarker(renderer.props, p.marking)
+                            && !cameraChanged && markingUpdated && !controls.isAnimating;
                         multiSampleHelper.render(ctx, p, true, forceOn);
                     } else {
                         passes.draw.render(ctx, p, true);
@@ -737,6 +791,11 @@ namespace Canvas3D {
                     pickHelper.dirty = pickHelper.dirty || shouldRender;
                     didRender = true;
                 }
+            }
+
+            // keep accumulating marking samples after the scene has settled
+            if (!didRender && !markingUpdated && canRedrawMarking && passes.draw.marking.needsMoreSamples) {
+                didRender = redrawMarking(false, getTemporalSamplesPerFrame(p.multiSample.sampleLevel));
             }
 
             return didRender;
@@ -813,11 +872,14 @@ namespace Canvas3D {
         function resetTime(t: now.Timestamp) {
             startTime = t;
             controls.start(t);
+            interactionHelper.resetTime(t);
         }
 
         function animate() {
             drawPaused = false;
-            controls.start(now());
+            const t = now();
+            controls.start(t);
+            interactionHelper.resetTime(t);
             if (animationFrameHandle === 0) _animate(0);
         }
 
@@ -842,7 +904,7 @@ namespace Canvas3D {
                 return rayHelper.identify(target, camera);
             } else {
                 const cam = (p.camera.stereo.name === 'on') ? stereoCamera : camera;
-                return pickHelper.identify(target[0], target[1], cam);
+                return pickHelper.identify(target[0], target[1], cam, frame);
             }
         }
 
@@ -854,7 +916,7 @@ namespace Canvas3D {
                 return rayHelper.asyncIdentify(target, camera);
             } else {
                 const cam = (p.camera.stereo.name === 'on') ? stereoCamera : camera;
-                return pickHelper.asyncIdentify(target[0], target[1], cam);
+                return pickHelper.asyncIdentify(target[0], target[1], cam, frame);
             }
         }
 
@@ -883,25 +945,27 @@ namespace Canvas3D {
             const boundingSphere = scene.boundingSphereVisible;
             const { center, radius } = boundingSphere;
 
-            const autoAdjustControls = controls.props.autoAdjustMinMaxDistance;
-            if (autoAdjustControls.name === 'on') {
-                const minDistance = autoAdjustControls.params.minDistanceFactor * radius + autoAdjustControls.params.minDistancePadding;
-                const maxDistance = Math.max(autoAdjustControls.params.maxDistanceFactor * radius, autoAdjustControls.params.maxDistanceMin);
-                controls.setProps({ minDistance, maxDistance });
-            }
-
             if (radius > 0) {
-                const duration = nextCameraResetOptions.durationMs === undefined ? p.cameraResetDurationMs : nextCameraResetOptions.durationMs;
+                const duration = nextCameraResetOptions.durationMs ?? p.cameraResetDurationMs;
+                const easing = nextCameraResetOptions.easing ?? p.cameraResetEasing;
+                const trajectory = nextCameraResetOptions.trajectory ?? p.cameraResetTrajectory;
+                const autoAdjustControls = controls.props.autoAdjustMinMaxDistance;
+                if (autoAdjustControls.name === 'on') {
+                    const minDistance = autoAdjustControls.params.minDistanceFactor * radius + autoAdjustControls.params.minDistancePadding;
+                    const maxDistance = Math.max(autoAdjustControls.params.maxDistanceFactor * radius, autoAdjustControls.params.maxDistanceMin);
+                    controls.setProps({ minDistance, maxDistance });
+                }
                 const focus = camera.getFocus(center, radius);
                 const next = typeof nextCameraResetOptions.snapshot === 'function' ? nextCameraResetOptions.snapshot(scene, camera) : nextCameraResetOptions.snapshot;
                 const snapshot = next ? { ...focus, ...next } : focus;
-                camera.setState({ ...snapshot, radiusMax: getSceneRadius() }, duration, { keyframes: nextCameraResetOptions.keyframes, easing: nextCameraResetOptions.easing });
+                camera.setState({ ...snapshot, radiusMax: getSceneRadius() }, duration, { keyframes: nextCameraResetOptions.keyframes, easing, trajectory });
             }
 
             nextCameraResetOptions.durationMs = void 0;
             nextCameraResetOptions.snapshot = void 0;
             nextCameraResetOptions.keyframes = void 0;
             nextCameraResetOptions.easing = void 0;
+            nextCameraResetOptions.trajectory = void 0;
 
             cameraResetRequested = false;
         }
@@ -956,7 +1020,9 @@ namespace Canvas3D {
             }
             if (oldBoundingSphereVisible.radius === 0) nextCameraResetOptions.durationMs = 0;
 
-            if (!p.camera.manualReset) camera.setState({ radiusMax: getSceneRadius() }, 0);
+            if (!p.camera.manualReset && scene.boundingSphere.radius > 0) {
+                camera.setState({ radiusMax: getSceneRadius() }, 0);
+            }
             reprCount.next(reprRenderObjects.size);
             if (isDebugMode) consoleStats();
 
@@ -971,6 +1037,7 @@ namespace Canvas3D {
                 renderItemId: r.id,
                 geometryType: r.values.dGeometryType.ref.value,
                 'byteCount [MiB]': toFixed(r.getByteCount() / 1024 / 1024, 3),
+                radius: toFixed(r.values.boundingSphere.ref.value.radius, 3),
             }));
 
             console.groupCollapsed(`${items.length} RenderItems`);
@@ -999,6 +1066,26 @@ namespace Canvas3D {
                     illumination: `${(passes.illumination.getByteCount() / 1024 / 1024).toFixed(3)} MiB`,
                     pick: `${(passes.pick.getByteCount() / 1024 / 1024).toFixed(3)} MiB`,
                     hiZ: `${(hiZ.getByteCount() / 1024 / 1024).toFixed(3)} MiB`,
+                }
+            }, undefined, 4));
+
+            console.log(JSON.stringify({
+                scene: {
+                    radius: toFixed(scene.boundingSphere.radius, 3),
+                    radiusVisible: toFixed(scene.boundingSphereVisible.radius, 3),
+                    transparency: scene.transparency,
+                    markerAverage: toFixed(scene.markerAverage, 2),
+                    emissiveAverage: toFixed(scene.emissiveAverage, 2),
+                    wiggleAverage: toFixed(scene.wiggleAverage, 2),
+                    opacityAverage: toFixed(scene.opacityAverage, 2),
+                    transparencyMin: toFixed(scene.transparencyMin, 2),
+                    hasOpaque: scene.hasOpaque,
+                    hasAnimation: scene.hasAnimation,
+                    counts: {
+                        all: scene.renderables.length,
+                        primitives: scene.primitives.renderables.length,
+                        volumes: scene.volumes.renderables.length,
+                    }
                 }
             }, undefined, 4));
 
@@ -1081,6 +1168,8 @@ namespace Canvas3D {
                     minNear: camera.state.minNear,
                 },
                 cameraResetDurationMs: p.cameraResetDurationMs,
+                cameraResetEasing: p.cameraResetEasing,
+                cameraResetTrajectory: p.cameraResetTrajectory,
                 sceneRadiusFactor: p.sceneRadiusFactor,
                 transparentBackground: p.transparentBackground,
                 checkeredTransparentBackground: p.checkeredTransparentBackground,
@@ -1170,10 +1259,9 @@ namespace Canvas3D {
             interactionEvent.pipe(
                 debounceTime(p.userInteractionReleaseMs)
             ).subscribe(() => {
+                // no requestDraw here: it would force a full illumination restart (flash) even
+                // though the next animation frame already resumes accumulation on its own
                 isActivelyInteracting = isDragging;
-                if (!isDragging && passes.illumination.supported && p.illumination.enabled) {
-                    requestDraw();
-                }
             }),
         ];
 
@@ -1326,6 +1414,8 @@ namespace Canvas3D {
                     stereoCamera.setProps(p.camera.stereo.params);
                 }
                 if (props.cameraResetDurationMs !== undefined) p.cameraResetDurationMs = props.cameraResetDurationMs;
+                if (props.cameraResetEasing !== undefined) p.cameraResetEasing = props.cameraResetEasing;
+                if (props.cameraResetTrajectory !== undefined) p.cameraResetTrajectory = props.cameraResetTrajectory;
                 if (props.transparentBackground !== undefined) p.transparentBackground = props.transparentBackground;
                 if (props.checkeredTransparentBackground !== undefined) p.checkeredTransparentBackground = props.checkeredTransparentBackground;
                 if (props.dpoitIterations !== undefined) p.dpoitIterations = props.dpoitIterations;
@@ -1356,13 +1446,15 @@ namespace Canvas3D {
                 if (props.illumination) Object.assign(p.illumination, props.illumination);
                 if (props.multiSample) Object.assign(p.multiSample, props.multiSample);
                 if (props.hiZ) hiZ.setProps(props.hiZ);
-                if (props.renderer) {
+                if (props.renderer || props.marking) {
                     scene.setGlobals({
-                        dColorMarker: props.renderer.colorMarker ?? renderer.props.colorMarker,
-                        dLightCount: props.renderer.light?.length ?? renderer.props.light.length,
+                        dColorMarker: isMaterialColorMarker({
+                            colorMarker: props.renderer?.colorMarker ?? renderer.props.colorMarker,
+                        }, p.marking),
+                        dLightCount: props.renderer?.light?.length ?? renderer.props.light.length,
                     });
-                    renderer.setProps(props.renderer);
                 }
+                if (props.renderer) renderer.setProps(props.renderer);
                 if (props.trackball) controls.setProps(props.trackball);
                 if (props.interaction) interactionHelper.setProps(props.interaction);
                 if (props.handle) helper.handle.setProps(props.handle);
@@ -1376,7 +1468,7 @@ namespace Canvas3D {
                 if ('transparentBackground' in props
                     || 'checkeredTransparentBackground' in props
                     || (props.renderer && 'backgroundColor' in props.renderer)) {
-                    syncCanvasBackground(canvas!, p);
+                    syncCanvasBackground(canvas, p);
                 }
 
                 shaderManager.updateRequired(p);

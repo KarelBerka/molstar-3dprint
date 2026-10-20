@@ -3,12 +3,15 @@
  *
  * @author Alexander Rose <alexander.rose@weirdbyte.de>
  * @author Ryan DiRisio <rjdiris@gmail.com>
+ * @author Paul Pillot <paul.pillot@tandemai.com>
  */
 
 import { TokenBuilder, Tokenizer } from '../../../mol-io/reader/common/text/tokenizer';
 import { guessElementSymbolTokens } from '../util';
 import { pdbToMmCif } from '../pdb/to-cif';
 import { PdbFile } from '../../../mol-io/reader/pdb/schema';
+import { trajectoryFromPDB } from '../pdb';
+import { Task } from '../../../mol-task';
 
 /** Helper: build a PdbFile from a raw PDB string. */
 function makePdb(pdbText: string): PdbFile {
@@ -240,5 +243,150 @@ describe('PDB SEQRES-to-label_seq_id alignment', () => {
         for (let i = 0; i < labelSeqId.rowCount; ++i) {
             expect(labelSeqId.int(i)).toBe(i + 1);
         }
+    });
+});
+
+describe('PDB label_atom_id unicity', () => {
+    it('preserves unique atom names within a residue', async () => {
+        const pdb = makePdb([
+            'ATOM   2161  CG2 MOL A 303      31.377  65.493  27.278  1.00 32.12           C  ',
+            'ATOM   2162  OG2 MOL A 303      31.727  64.432  26.692  1.00 30.76           O  ',
+            'ATOM   2163  OG3 MOL A 303      30.170  65.084  27.156  1.00 32.03           O  ',
+            'END                                                                             ',
+        ].join('\n'));
+
+        const cif = await pdbToMmCif(pdb);
+        const atomSite = cif.categories['atom_site'];
+        const labelAtomId = atomSite.getField('label_atom_id')!;
+
+        expect(labelAtomId.str(0)).toBe('CG2');
+        expect(labelAtomId.str(1)).toBe('OG2');
+        expect(labelAtomId.str(2)).toBe('OG3');
+    });
+
+    it('deduplicates repeated atom names within a residue', async () => {
+        const pdb = makePdb([
+            'ATOM   2161  C   MOL A 303      31.377  65.493  27.278  1.00 32.12           C  ',
+            'ATOM   2162  O   MOL A 303      31.727  64.432  26.692  1.00 30.76           O  ',
+            'ATOM   2163  O   MOL A 303      30.170  65.084  27.156  1.00 32.03           O  ',
+            'END                                                                             ',
+        ].join('\n'));
+
+        const cif = await pdbToMmCif(pdb);
+        const atomSite = cif.categories['atom_site'];
+        const labelAtomId = atomSite.getField('label_atom_id')!;
+
+        expect(labelAtomId.str(0)).toBe('C');
+        expect(labelAtomId.str(1)).toBe('O');
+        expect(labelAtomId.str(2)).toBe('O_1'); // deduplicated
+    });
+
+    it('No suffix added to same atom names for altlocs)', async () => {
+        const pdb = makePdb([
+            'HETATM 2161  CG2 SRY A 303      31.377  65.493  27.278  1.00 32.12           C  ',
+            'HETATM 2162  OG2ASRY A 303      31.727  64.432  26.692  0.50 30.76           O  ',
+            'HETATM 2163  OG2BSRY A 303      30.170  65.084  27.156  0.50 32.03           O  ',
+            'END                                                                             ',
+        ].join('\n'));
+
+        const cif = await pdbToMmCif(pdb);
+        const atomSite = cif.categories['atom_site'];
+        const labelAtomId = atomSite.getField('label_atom_id')!;
+        const labelAltId = atomSite.getField('label_alt_id')!;
+
+        expect(labelAtomId.str(0)).toBe('CG2');
+        expect(labelAtomId.str(1)).toBe('OG2');
+        expect(labelAtomId.str(2)).toBe('OG2');
+        expect(labelAltId.str(1)).toBe('A');
+        expect(labelAltId.str(2)).toBe('B');
+    });
+});
+
+describe('PDB entities with SEQRES', () => {
+    const capAtoms = [
+        'ATOM      1  CH3 ACE A   1      10.000   6.000  -6.000  1.00  0.00           C  ',
+        'ATOM      2  C   ACE A   1      10.800   6.100  -5.000  1.00  0.00           C  ',
+        'ATOM      3  O   ACE A   1      10.300   6.200  -3.900  1.00  0.00           O  ',
+        'ATOM      4  N   ALA A   2      12.100   6.100  -5.200  1.00  0.00           N  ',
+        'ATOM      5  CA  ALA A   2      13.000   6.000  -4.100  1.00  0.00           C  ',
+        'ATOM      6  C   ALA A   2      14.400   6.300  -4.600  1.00  0.00           C  ',
+        'ATOM      7  O   ALA A   2      14.700   6.900  -5.600  1.00  0.00           O  ',
+        'END                                                                             ',
+    ];
+
+    it('includes protein caps listed in SEQRES in the polymer entity', async () => {
+        const pdb = makePdb([
+            'SEQRES   1 A    2  ACE ALA                                                   ',
+            ...capAtoms,
+        ].join('\n'));
+
+        const cif = await pdbToMmCif(pdb);
+        const entity = cif.categories['entity'];
+        expect(entity.rowCount).toBe(1);
+        expect(entity.getField('type')!.str(0)).toBe('polymer');
+        expect(entity.getField('pdbx_description')!.str(0)).toBe('Polymer 1');
+
+        const labelEntityId = cif.categories['atom_site'].getField('label_entity_id')!;
+        for (let i = 0; i < labelEntityId.rowCount; ++i) {
+            expect(labelEntityId.str(i)).toBe('1');
+        }
+
+        const epsMonId = cif.categories['entity_poly_seq'].getField('mon_id')!;
+        expect(epsMonId.rowCount).toBe(2);
+        expect(epsMonId.str(0)).toBe('ACE');
+        expect(epsMonId.str(1)).toBe('ALA');
+    });
+
+    it('derives polymer entity subtype past leading protein cap', async () => {
+        const pdb = makePdb([
+            'SEQRES   1 A    2  ACE ALA                                                   ',
+            ...capAtoms,
+        ].join('\n'));
+
+        const trajectory = await trajectoryFromPDB(pdb).run();
+        const model = await Task.resolveInContext(trajectory.getFrameAtIndex(0));
+        expect(model.entities.data.type.value(0)).toBe('polymer');
+        expect(model.entities.subtype.value(0)).toBe('polypeptide(L)');
+        expect(model.properties.chemicalComponentMap.get('ACE')!.mon_nstd_flag).toBe('y');
+    });
+
+    it('keeps protein caps as separate entity without SEQRES', async () => {
+        const cif = await pdbToMmCif(makePdb(capAtoms.join('\n')));
+        const entity = cif.categories['entity'];
+        expect(entity.rowCount).toBe(2);
+        expect(entity.getField('type')!.str(0)).toBe('non-polymer');
+        expect(entity.getField('type')!.str(1)).toBe('polymer');
+    });
+
+    it('keeps protein caps not listed in SEQRES as separate entity', async () => {
+        const pdb = makePdb([
+            'SEQRES   1 A    2  ALA GLY                                                   ',
+            'ATOM      1  CA  ALA A   1       1.000   2.000   3.000  1.00  0.00           C  ',
+            'ATOM      2  CA  GLY A   2       4.000   5.000   6.000  1.00  0.00           C  ',
+            'HETATM    3  C   FMT A   3       7.000   8.000   9.000  1.00  0.00           C  ',
+            'END                                                                             ',
+        ].join('\n'));
+
+        const cif = await pdbToMmCif(pdb);
+        const entity = cif.categories['entity'];
+        expect(entity.rowCount).toBe(2);
+        expect(entity.getField('type')!.str(0)).toBe('polymer');
+        expect(entity.getField('type')!.str(1)).toBe('non-polymer');
+        expect(entity.getField('pdbx_description')!.str(1)).toBe('FMT');
+    });
+
+    it('upgrades SEQRES entity to polymer when first residue is non-polymer', async () => {
+        const pdb = makePdb([
+            'SEQRES   1 A    2  XYZ ALA                                                   ',
+            'HETATM    1  C1  XYZ A   1       1.000   2.000   3.000  1.00  0.00           C  ',
+            'ATOM      2  CA  ALA A   2       4.000   5.000   6.000  1.00  0.00           C  ',
+            'END                                                                             ',
+        ].join('\n'));
+
+        const cif = await pdbToMmCif(pdb);
+        const entity = cif.categories['entity'];
+        expect(entity.rowCount).toBe(1);
+        expect(entity.getField('type')!.str(0)).toBe('polymer');
+        expect(entity.getField('pdbx_description')!.str(0)).toBe('Polymer 1');
     });
 });

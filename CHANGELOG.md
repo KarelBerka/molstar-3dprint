@@ -4,6 +4,164 @@ All notable changes to this project will be documented in this file, following t
 Note that since we don't clearly distinguish between a public and private interfaces there will be changes in non-major versions that are potentially breaking. If we make breaking changes to less used interfaces we will highlight it in here.
 
 ## [Unreleased]
+
+## [v5.13.1] - 2026-10-08
+- ModelServer and VolumeServer: support chained string operations in path templates and fix `substring` to use an exclusive end index instead of a length (#1963)
+
+## [v5.13.0] - 2026-10-04
+- BinaryCIF: masked `int`/`float` field values now return the default `0` instead of the value left in the data array, matching the text/mmCIF parsers. Applies to the bulk `toIntArray`/`toFloatArray` APIs as well (#1711)
+- Fix PDB entities with caps: include protein caps listed in SEQRES in the polymer entity and don't make SEQRES entities non-polymer when the first residue is non-polymer
+- Separate marking from scene rendering: marking is composed onto the finished image
+  - Antialiased marking edges (via `postprocessing.antialiasing`), multi-sampled with the scene's jitter
+  - With `renderer.colorMarker`, the marking pass tints marked and dims unmarked regions
+  - Tint and dim strengths are weighted by fragment opacity
+  - Marking-only changes (e.g. hover, select) no longer trigger a full re-render
+  - `marking.edgeScale` is no longer rounded to whole pixels
+  - Move `JitterVectors` from `passes/multi-sample` to `passes/jitter`
+  - `multiSample.reduceFlicker` only applies when marking is disabled
+- Prefer structure-level visuals for very high (>= 10000) unique unit counts (#1953)
+- Solid interior improvements
+    - Add `solidInterior` param to mesh-based visuals (solid cap where the camera near plane or a clip object cuts a closed surface)
+    - Cap impostor spheres and cylinders with `solidInterior` at clip objects, not only at the camera near plane
+    - Add `solidSurface` option to `StructureComponentManager` (sets `solidInterior` of surface representations)
+    - Default `solidInterior` to `true` for molecular, gaussian and blob surface representations
+- [Breaking] `createRenderTarget` takes a `depthStencil` option (`'none' | 'depth' | 'depth-stencil'`) in place of the `depth` flag
+- Fix back faces of opaque objects missing from the packed depth (outlines and occlusion with the camera inside a surface)
+- Fix pick positions landing on the near plane without the `WEBGL_draw_buffers` extension (depth was not written when rendering every mask)
+
+## [v5.12.0] - 2026-09-28
+- Make CIF field lookup case insensitive, so mmCIF files writing `_atom_site.cartn_x` resolve fields like `Cartn_x` instead of leaving coordinates at 0,0,0 (#1941)
+- Headless rendering:
+  - Allow consumers to provide `gl` version 6 through 8
+  - Fix browser-only layout/canvas access when rendering without a DOM
+  - Fix version handling in commonjs
+  - Tests for `HeadlessPluginContext`
+- Merge representation render-objects to reduce draw-calls
+- Optimize `Renderable` culling with a frame token guard
+- Improve dynamic trackball controls and show param
+- Fix altloc in PDB files receive different atom names (#156)
+- Add `volume-tools/segmentor`: interactive segmentation of a volume into bodies (polygon labelling from several views, remainder assignment, dust removal, handedness flip, per-body extend + cosine soft edge, MRC mask export)
+- **Breaking**: move the `volume-mask` extension to `volume-tools/mask`, alongside the new segmentor; `ViewMask`, its projection and the in-place volume operations are now shared at `volume-tools/`. Update imports from `extensions/volume-mask` to `extensions/volume-tools/mask`
+- Merge the `volume-mask` example into a `volume-tools` example, with a landing page and one page per tool
+- Fix `CCP4Writer.writeMrc` for volumes with a non-canonical axis order
+- Fix `CCP4Writer.writeMrc` writing `ISPG = 0`, which marks the data as an image stack rather than a volume
+- Add `squaredDistanceTransform3D` (exact Euclidean distance transform) to `mol-math/geometry`
+- Optimize `GridLookup3D` building for sparse grids
+- Optimize `calcInstanceGrid` by reducing amount of data copied
+- Viewer app: keep track of instances in static `Viewer.instances`
+- Fix missing reset time for `Canvas3dInteractionHelper`
+- Remove unused `floodfill` param from the gaussian density volume representation
+- Fix CPU surface/volume visuals rebuilding on every update if GPU path is unavailable
+- Fix `floodfill` not applied on the gaussian surface wireframe
+- Fix `traceOnly` update being ignored by the molecular surface wireframe visuals
+- Fix SSAO artifacts near viewport edges by clamping off-screen samples instead of discarding them
+- Fix illumination trace reading color/normal/depth outside viewport bounds
+- Added support for molecular atom_style in lammps data files
+- Added element symbol detection in lammps data file
+- Fix inconsistent atomic weight for some elements in `ElementAtomWeights`
+- Fix extra Hydrogens not in chemcomp dict. are disconnected (#1888)
+- Use IUPAC names for `Nh`/`Mc`/`Ts`/`Og` elements
+- Add `mergeBySymmetry` option to root structure transform (merge units with same symmetry operator)
+- Add support for multi-chain units in sequence UI
+- Add script to generate spacegroup data from CCP4 syminfo.lib
+- Refactor spacegroup construction
+    - Use syminfo.lib spacegroup data as source
+    - Generate operators from Hall symbols
+    - Introduce change-of-basis settings
+    - Move base functionality from `SpacegroupCell` to `Cell`
+- Improve `Cell` handling
+    - Fix volume calculation for non-orthogonal cells
+    - Use as base for `Unitcell` shape
+    - Add `order` property (for AU volume estimation)
+- Add per-format cache for `FormatProperty`
+    - Use for `ModelSymmetry` and `ComponentBond`
+- `ModelSymmetry` improvements
+    - Fix property not being dynamic
+    - Defer Symmetry calculation in ModelSymmetry.fromData
+- Support non-default CRYSIN setting in MOL2 format (#338)
+- Fix `ssao-blur` background test: the RG-packed depth never equals `1.0`
+- Fix picking/hover-highlight of the nucleic cartoon polymer-trace on partial structures
+- Fix stale marker data in `VolumeVisual` when a geometry update changes the group count
+- Add Spherical Harmonics to mol-math
+- Add `blob-surface` structure representation
+    - Bin atoms to grid or cluster
+    - Fast option fits ellipsoids to bins
+    - Artistic option fits spherical harmonics to bins
+    - Mesh and wireframe visuals, per-unit & per-structure
+- Illumination
+    - Remove `firstStepSize` tracing parameter, derive automatically
+    - Fix illumination `auto` thickness mode never correctly being applied
+    - Fix illumination ray marching stepping over occluders
+    - Evaluate illumination `auto` thickness at the surface being tested
+    - Fix `NaN` in illumination shadows when a light color channel sums to zero
+    - Fix illumination indirect light ignoring `exposure` and the shading clamp
+    - Remove illumination `glow` parameter
+    - Fix sphere/cylinder impostors writing their near surface in the back-depth pass
+    - Fix mesh back faces & cylinder far hits being discarded as `interior` in the back-depth pass
+    - Fix illumination shadows not weighing occlusion by per-light irradiance
+- Add `.parseRaw` to `DataFormatProvider` for out of state tree parsing
+- Carbohydrate symbols
+  - All carbohydrate symbols are rendered with 2 groups (primary and secondary) and can be potentially colored in two colors
+  - CarbohydrateSymbolColorTheme decides which shape will be colored by one or two colors
+  - Changed side length ratio of FlatBox shape from 2:2:1 to 2:1:1
+- Camera improvements
+    - Support multiple camera transition shapes
+    - Add `transitionTrajectory` and `transitionEasing` parameters to `PluginState.Snapshot` (MOLJ) and Plugin State > Save Options
+    - Add `trajectory` and `easing` parameters to `FocusLoci` behavior
+    - Add `cameraResetTrajectory` and `cameraResetEasing` parameters to `Canvas3DParams`
+    - Fix camera reset handling for (temporary) empty scenes (#1903)
+- MolViewSpec
+    - Added `transition` node with params `duration_ms`, `trajectory`, `easing`
+    - Snapshot metadata: `linger_duration_ms` renamed to `duration_ms`, deprecated `transition_duration_ms`
+    - MVS-related custom model properties (and custom structure properties) are hidden in UI (fixes override of default custom properties)
+    - Added `shape` node for rendering meshes from `vtp`, `ply` and `obj` resources
+    - Added support for MolQL selectors (e.g., select a residue + 5 ang surroundings)
+    - Add support for split colors (e.g. 'red/white', applies to carbohydrate symbols and nucleic cartoon)
+    - Add CarbohydrateSymbol color palette
+- Remove `new Function` usage for CSP / SOC2 compliance; server path templates use a whitelist of `${id...}` string methods
+- Fix CCP4/MRC volumes with unset cell angles failing to load
+- Fix CCP4/MRC volume `sigma` being taken from the header when the header rms is negative
+- Add Particles as first class objects
+    - `ParticleList` and `ParticleTrajectory`
+    - Formats: ariatomi-em, cryoet-ndjson, dynamo-tbl, relion-star, simularium, cellpack & petworld mmcif
+    - Properties: position, orientation, radius, entity, compartment, custom attributes, fibers
+    - Particles can be decorated with structure, volume, and shape visuals
+- Fix bumpiness artifacts on impostor seams and clip boundaries
+    - Change `bumpFrequency` defaults of ball-and-stick (5) and backbone (4)
+
+## [v5.11.0] - 2026-07-18
+- Fix LAMMPS unsorted-atom handling (trajectory frame ordering and data-file bonds)
+- Add `variant` option (rectangle/circle) to the best-fit `Plane` (#358)
+- Add VTK PolyData `.vtp` file format support
+- Bloom on transparent and emissive geometry
+  - Move bloom into the postprocessing/illumination pass (composited inline)
+  - Tighten `isBackground` to handle packed transparent depth precisely
+  - Enable bloom on transparent background
+  - Background-aware blend: screen on transparent background, PMA over on opaque background, additive on geometry
+  - Occlude emissive bloom behind opaque foreground (e.g. opaque label backgrounds) by reusing the opaque depth (#1881)
+  - Dim emitters behind transparent foreground by its coverage
+  - Text label backgrounds occlude/dim emitters using their own opacity
+- Fix size-only representation theme updates in `updateRepresentationsTheme`.
+- Fix ASA coloring for hydrogens
+- Add `histogramPercentile`, `histogramRobustStats`, `downsampleHistogram` to `mol-math/histogram`
+- Direct-volume transfer function improvements
+    - Add data-aware default control points and preset library
+    - Use log-scale on y-axis in control-points UI
+- Add `defaultSnapshotIndex` argument to `MVSLoadOptions` to enable loading a snapshot other than the first one by default
+- Fix `loaders.loadMvs*` options type
+- Read simulation box from gro and lammps files
+- Add FFT to mol-math
+- Add SF-CIF and MTZ structure factors file formats support
+- Add support for calculating volumes from structure factors
+- Rework Superposition UI panel
+- Add Ligand alignments by maximum common connected subgraphs (MCCS)
+- Handle unobserved residues from `entity_poly_seq` (#965)
+- Refine step for coarse BoundaryHelper instances (#1455)
+- Refactor `StructureElement.Loci.getBoundary`
+    - Add `.getBoundingSphere`, reuse whole structure/unit boundary
+    - [Breaking] remove transform argument
+
+## [v5.10.0] - 2026-06-14
 - Fix exported image artifacts on transparent background with emissive, bloom, or antialiasing
 - Fix cel-shaded ambient color being stripped to luminance (now uses full RGB, matching the classic lighting path)
 - Fix empty transforms default in `ShapeFromPly`
@@ -20,13 +178,27 @@ Note that since we don't clearly distinguish between a public and private interf
 - Fix aromatic ring detection not accounting for hybridization
 - Add axis param to camera spin/rock animation
 - Fix SSAO half/quarter resolution textures for multi-scale
-- Camera improvements 
+- Camera improvements
   - Add the option to approximate "least obstructed direction" when focusing camera, accessibe via `PluginContext.managers.camera.focusLoci` with `optimizeDirection` option
   - Add `CameraFocusOptions.zoomOut` option that zooms out to to make the entire scene visible before focusing on the target
   - Add easing support in camera transtion
 - Non-covalent interactions: water bridge support
+- Add OBJ format support
+    - Positions, normals, faces
+    - Groups from usemtl directive
+    - Vertex color extension
+    - Sideload MTL files (diffuse color only)
 - Download Structure From AlphaFoldDB allows IDs with version suffix (version is ignored)
 - Add `loadUrl` method and GET params to Viewer app
+- Add binary PLY format variants support
+- Add `extensions/plugin` with several QoL improvements
+  - Standalone useful loading functions previously avaiable only in the `Viewer` class
+  - Standalong plugin interactivity helper function previously available only via the `Viewer` class
+  - View models (and hooks) for more straightforward usage in React (and in other UI libraries)
+- Add `examples/react` that showcases few ways the Mol* can be used together with React
+- Fix default representation plugin option, which resulted in represenations not being shown automatically when using the default plugin spec
+- Track added custom props in `QueryRuntimeTable` to prevent excess "symbol already added" messages when creating multiple instances of a pluing
+- Handle empty `chem_comp.type`
 
 ## [v5.9.0] - 2026-05-03
 - Fix edge case when `PluginSpec.animations` is empty

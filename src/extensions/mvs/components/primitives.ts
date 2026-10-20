@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2024-2025 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ * Copyright (c) 2024-2026 mol* contributors, licensed under MIT, See LICENSE file for more info.
  *
  * @author David Sehnal <david.sehnal@gmail.com>
  * @author Adam Midlik <midlik@gmail.com>
@@ -44,7 +44,7 @@ import { addParamDefaults } from '../tree/generic/params-schema';
 import { treeValidationIssues } from '../tree/generic/tree-validation';
 import { MolstarNode, MolstarNodeParams, MolstarSubtree } from '../tree/molstar/molstar-tree';
 import { MVSNode, MVSTreeSchema } from '../tree/mvs/mvs-tree';
-import { isComponentExpression, isPrimitiveComponentExpressions, isVector3, PrimitivePositionT } from '../tree/mvs/param-types';
+import { isComponentExpression, isPrimitiveComponentExpression, isPrimitiveMolQLExpression, isVector3, PrimitivePositionT } from '../tree/mvs/param-types';
 import { MVSTransform } from './annotation-structure-component';
 
 
@@ -96,14 +96,20 @@ export const MVSDownloadPrimitiveData = MVSTransform({
             if (node.kind !== 'primitives') {
                 throw new Error(`Expected primitives node from ${params.uri}, got ${node.kind}`);
             }
+            // NOTE: `addParamDefaults` results are assigned to local variables (rather than being
+            // used directly as object literal properties) to avoid contextual-type-driven generic
+            // inference issues with TypeScript 7 (the expected `params` field type would otherwise
+            // leak into the generic parameter inference for `addParamDefaults`).
+            const primitivesParams = addParamDefaults<typeof MVSTreeSchema.nodes.primitives.params>(MVSTreeSchema.nodes.primitives.params, node.params || {});
             const nodeWithDefaults: MolstarSubtree<'primitives'> = {
                 ...node,
-                params: addParamDefaults(MVSTreeSchema.nodes.primitives.params, node.params || {}),
+                params: primitivesParams,
                 children: node.children?.map((child: any) => {
                     if (child.kind === 'primitive') {
+                        const childParams = addParamDefaults<typeof MVSTreeSchema.nodes.primitive.params>(MVSTreeSchema.nodes.primitive.params, child.params || {});
                         return {
                             ...child,
-                            params: addParamDefaults(MVSTreeSchema.nodes.primitive.params, child.params || {})
+                            params: childParams
                         };
                     }
                     return child;
@@ -481,7 +487,7 @@ function getPrimitives(primitives: MolstarSubtree<'primitives'>) {
 }
 
 function addRef(position: PrimitivePositionT, refs: Set<string>) {
-    if (isPrimitiveComponentExpressions(position) && position.structure_ref) {
+    if ((isPrimitiveComponentExpression(position) || isPrimitiveMolQLExpression(position)) && position.structure_ref) {
         refs.add(position.structure_ref);
     }
 }
@@ -525,9 +531,12 @@ function resolvePosition(context: PrimitiveBuilderContext, position: PrimitivePo
         return true;
     }
 
-    if (isPrimitiveComponentExpressions(position)) {
+    if (isPrimitiveComponentExpression(position)) {
         // TODO: take schema into account for possible optimization
-        expr = rowsToExpression(position.expressions!);
+        expr = position.expressions ? rowsToExpression(position.expressions) : rowToExpression(position);
+        pivotRef = position.structure_ref;
+    } else if (isPrimitiveMolQLExpression(position)) {
+        expr = position.molql as Expression;
         pivotRef = position.structure_ref;
     } else if (isComponentExpression(position)) {
         expr = rowToExpression(position);

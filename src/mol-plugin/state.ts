@@ -1,16 +1,18 @@
 /**
- * Copyright (c) 2018-2025 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ * Copyright (c) 2018-2026 mol* contributors, licensed under MIT, See LICENSE file for more info.
  *
  * @author David Sehnal <david.sehnal@gmail.com>
  * @author Alexander Rose <alexander.rose@weirdbyte.de>
  * @author Adam Midlik <midlik@gmail.com>
  */
 
-import { produce } from '../mol-util/produce';
 import { merge } from 'rxjs';
 import { Camera } from '../mol-canvas3d/camera';
+import { TransitionTrajectory, TransitionTrajectoryParamDefinition } from '../mol-canvas3d/camera/transition-functions';
 import { Canvas3DContext, Canvas3DParams, Canvas3DProps } from '../mol-canvas3d/canvas3d';
+import { EasingKind, EasingParamDefinition } from '../mol-math/easing';
 import { Vec3 } from '../mol-math/linear-algebra';
+import { AnimateStateSnapshotTransition } from '../mol-plugin-state/animation/built-in/state-snapshots';
 import { PluginComponent } from '../mol-plugin-state/component';
 import { PluginAnimationManager } from '../mol-plugin-state/manager/animation';
 import { InteractivityManager } from '../mol-plugin-state/manager/interactivity';
@@ -19,15 +21,15 @@ import { StructureFocusSnapshot } from '../mol-plugin-state/manager/structure/fo
 import { StructureSelectionSnapshot } from '../mol-plugin-state/manager/structure/selection';
 import { PluginStateObject as SO } from '../mol-plugin-state/objects';
 import { State, StateTransform, StateTransformer } from '../mol-state';
+import { Scheduler } from '../mol-task';
 import { UUID } from '../mol-util';
+import { memoizeLatest } from '../mol-util/memoize';
 import { ParamDefinition as PD } from '../mol-util/param-definition';
+import { produce } from '../mol-util/produce';
 import { PluginBehavior } from './behavior';
 import { PluginCommands } from './commands';
 import { PluginConfig } from './config';
 import { PluginContext } from './context';
-import { AnimateStateSnapshotTransition } from '../mol-plugin-state/animation/built-in/state-snapshots';
-import { Scheduler } from '../mol-task';
-import { memoizeLatest } from '../mol-util/memoize';
 
 export { PluginState };
 
@@ -67,7 +69,9 @@ class PluginState extends PluginComponent {
             camera: p.camera ? {
                 current: this.plugin.canvas3d!.camera.getSnapshot(),
                 transitionStyle: p.cameraTransition!.name,
-                transitionDurationInMs: p?.cameraTransition?.name === 'animate' ? p.cameraTransition.params.durationInMs : void 0
+                transitionDurationInMs: p?.cameraTransition?.name === 'animate' ? p.cameraTransition.params.durationInMs : void 0,
+                transitionEasing: p?.cameraTransition?.name === 'animate' ? p.cameraTransition.params.easing : void 0,
+                transitionTrajectory: p?.cameraTransition?.name === 'animate' ? p.cameraTransition.params.trajectory : void 0,
             } : void 0,
             canvas3dContext: p.canvas3dContext ? { props: this.plugin.canvas3dContext?.props } : void 0,
             canvas3d: p.canvas3d ? { props: this.plugin.canvas3d?.props } : void 0,
@@ -118,11 +122,16 @@ class PluginState extends PluginComponent {
             PluginCommands.Camera.Reset(this.plugin, {
                 snapshot: snapshot.camera.current,
                 durationMs: snapshot.camera.transitionStyle === 'animate' ? snapshot.camera.transitionDurationInMs : undefined,
+                easing: snapshot.camera.transitionStyle === 'animate' ? snapshot.camera.transitionEasing : undefined,
+                trajectory: snapshot.camera.transitionStyle === 'animate' ? snapshot.camera.transitionTrajectory : undefined,
+
             });
         } else if (snapshot.camera?.focus) {
             PluginCommands.Camera.FocusObject(this.plugin, {
                 ...snapshot.camera.focus,
                 durationMs: snapshot.camera.transitionStyle === 'animate' ? snapshot.camera.transitionDurationInMs : undefined,
+                easing: snapshot.camera.transitionStyle === 'animate' ? snapshot.camera.transitionEasing : undefined,
+                trajectory: snapshot.camera.transitionStyle === 'animate' ? snapshot.camera.transitionTrajectory : undefined,
             });
         }
 
@@ -157,6 +166,8 @@ class PluginState extends PluginComponent {
             PluginCommands.Camera.Reset(this.plugin, {
                 snapshot: frame.camera.current,
                 durationMs: frame.camera.transitionStyle === 'animate' ? frame.camera.transitionDurationInMs : undefined,
+                easing: frame.camera.transitionStyle === 'animate' ? frame.camera.transitionEasing : undefined,
+                trajectory: frame.camera.transitionStyle === 'animate' ? frame.camera.transitionTrajectory : undefined,
             });
         }
 
@@ -170,8 +181,9 @@ class PluginState extends PluginComponent {
         return PluginCommands.State.Update(this.plugin, { state, tree, options: { canUndo } });
     }
 
-    hasBehavior(behavior: StateTransformer) {
-        return this.behaviors.tree.transforms.has(behavior.id);
+    hasBehavior(behavior: StateTransformer | string) {
+        const behaviorId = typeof behavior === 'string' ? behavior : behavior.id;
+        return this.behaviors.tree.transforms.has(behaviorId);
     }
 
     updateBehavior<T extends StateTransformer>(behavior: T, params: (old: StateTransformer.Params<T>) => (void | StateTransformer.Params<T>)) {
@@ -221,6 +233,8 @@ namespace PluginState {
         cameraTransition: PD.MappedStatic('animate', {
             animate: PD.Group({
                 durationInMs: PD.Numeric(250, { min: 100, max: 5000, step: 500 }, { label: 'Duration in ms' }),
+                easing: EasingParamDefinition('linear'),
+                trajectory: TransitionTrajectoryParamDefinition('linear'),
             }),
             instant: PD.Group({})
         }, { options: [['animate', 'Animate'], ['instant', 'Instant']] }),
@@ -239,7 +253,9 @@ namespace PluginState {
             current?: Camera.Snapshot,
             focus?: SnapshotFocusInfo,
             transitionStyle: CameraTransitionStyle,
-            transitionDurationInMs?: number
+            transitionDurationInMs?: number,
+            transitionEasing?: EasingKind,
+            transitionTrajectory?: TransitionTrajectory,
         },
         canvas3d?: {
             props?: Canvas3DProps

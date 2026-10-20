@@ -23,6 +23,7 @@ import { StructureMeasurementsControls } from './structure/measurements';
 import { StructureSelectionActionsControls } from './structure/selection';
 import { StructureSourceControls } from './structure/source';
 import { VolumeStreamingControls, VolumeSourceControls } from './structure/volume';
+import { ParticleSourceControls } from './structure/particles';
 import { PluginConfig } from '../mol-plugin/config';
 import { StructureSuperpositionControls } from './structure/superposition';
 import { StructureQuickStylesControls } from './structure/quick-styles';
@@ -342,6 +343,7 @@ export class DefaultStructureTools extends PluginUIComponent {
             <StructureComponentControls initiallyCollapsed={true} />
             {this.plugin.config.get(PluginConfig.VolumeStreaming.Enabled) && <VolumeStreamingControls initiallyCollapsed={true} />}
             <VolumeSourceControls initiallyCollapsed={true} />
+            <ParticleSourceControls initiallyCollapsed={true} />
 
             <CustomStructureControls initiallyCollapsed={false} />
         </>;

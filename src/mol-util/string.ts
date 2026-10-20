@@ -64,9 +64,59 @@ export function substringStartsWith(str: string, start: number, end: number, tar
 }
 
 export function interpolate(str: string, params: { [k: string]: any }) {
-    const names = Object.keys(params);
-    const values = Object.values(params);
-    return new Function(...names, `return \`${str}\`;`)(...values);
+    return str.replace(/\$\{(\w+)\}/g, (_, key) => String(params[key] ?? ''));
+}
+
+const idPathExpressionRe = /\$\{([^}]+)\}/g;
+
+/** Replicate `substr(start, length)` using `substring`, clamping to available characters. */
+function idSubstrLike(id: string, start: number, length: number): string {
+    if (length <= 0) return '';
+    let from = start;
+    if (from < 0) from = Math.max(0, id.length + from);
+    return id.substring(from, from + length);
+}
+
+function evaluateIdPathExpression(expr: string, id: string): string {
+    const trimmed = expr.trim();
+    const unsupported = () => new Error(`Unsupported id path expression: \${${expr}}`);
+    if (!trimmed.startsWith('id')) throw unsupported();
+
+    let remaining = trimmed.substring(2);
+    let value = id;
+    while (remaining.length > 0) {
+        const call = /^\.(toLowerCase|toUpperCase|substr|substring|slice)\(([^()]*)\)/.exec(remaining);
+        if (!call) throw unsupported();
+        const method = call[1];
+        const args = call[2].trim();
+        if (method === 'toLowerCase' || method === 'toUpperCase') {
+            if (args !== '') throw unsupported();
+            value = method === 'toLowerCase' ? value.toLowerCase() : value.toUpperCase();
+        } else {
+            const indices = /^(\d+)(?:,\s*(\d+))?$/.exec(args);
+            if (!indices || (method === 'substr' && indices[2] === undefined)) throw unsupported();
+            const start = +indices[1];
+            const endOrLength = indices[2] !== undefined ? +indices[2] : undefined;
+            switch (method) {
+                case 'substr': value = idSubstrLike(value, start, endOrLength!); break;
+                case 'substring': value = value.substring(start, endOrLength); break;
+                case 'slice': value = value.slice(start, endOrLength); break;
+            }
+        }
+        remaining = remaining.substring(call[0].length);
+    }
+    return value;
+}
+
+/** Validate that a path template only uses supported `${id…}` expressions. */
+export function validateIdPathTemplate(template: string) {
+    for (const match of template.matchAll(idPathExpressionRe)) {
+        evaluateIdPathExpression(match[1], 'test-id');
+    }
+}
+
+export function interpolateIdPath(template: string, id: string): string {
+    return template.replace(idPathExpressionRe, (_, expr) => evaluateIdPathExpression(expr, id));
 }
 
 export function trimChar(str: string, char: string) {

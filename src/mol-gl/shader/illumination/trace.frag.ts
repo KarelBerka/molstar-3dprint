@@ -1,7 +1,8 @@
 /**
- * Copyright (c) 2024 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ * Copyright (c) 2024-2026 mol* contributors, licensed under MIT, See LICENSE file for more info.
  *
  * @author Alexander Rose <alexander.rose@weirdbyte.de>
+ * @author Gianluca Tomasello <giagitom@gmail.com>
  */
 
 export const trace_frag = `
@@ -29,7 +30,7 @@ uniform vec3 uFogColor;
     uniform vec3 uLightColor[dLightCount];
 #endif
 uniform vec3 uAmbientColor;
-uniform vec3 uLightStrength;
+uniform float uExposure;
 
 uniform int uFrameNo;
 
@@ -105,14 +106,18 @@ struct RayHitInfo {
 
 //
 
+// inset by half a texel to avoid sampling texels outside the viewport
+vec2 clampToBounds(const in vec2 coords) {
+    vec2 halfTexel = 0.5 / uTexSize;
+    return clamp(coords, uBounds.xy + halfTexel, uBounds.zw - halfTexel);
+}
+
 float getDepth(const in vec2 coords) {
-    vec2 c = vec2(clamp(coords.x, uBounds.x, uBounds.z), clamp(coords.y, uBounds.y, uBounds.w));
-    return texture2D(tDepth, c).r;
+    return texture2D(tDepth, clampToBounds(coords)).r;
 }
 
 float getThickness(const in vec2 coords) {
-    vec2 c = vec2(clamp(coords.x, uBounds.x, uBounds.z), clamp(coords.y, uBounds.y, uBounds.w));
-    return unpackRGBAToDepth(texture2D(tThickness, c));
+    return unpackRGBAToDepth(texture2D(tThickness, clampToBounds(coords)));
 }
 
 bool isBackground(const in float depth) {
@@ -133,6 +138,15 @@ vec2 viewSpaceToScreenSpace(const vec3 position) {
     // [-1, 1] --> [0, 1] (NDC to screen position)
     projectedCoord.xy = projectedCoord.xy * 0.5 + 0.5;
     return projectedCoord.xy;
+}
+
+float getRayOffset(const vec3 position) {
+    vec4 projectedCoord = uProjection * vec4(position, 1.0);
+    projectedCoord.xyz /= projectedCoord.w;
+    projectedCoord.xyz = projectedCoord.xyz * 0.5 + 0.5;
+    float viewportWidth = uTexSize.x * (uBounds.z - uBounds.x);
+    vec3 adjacentPosition = screenSpaceToViewSpace(vec3(projectedCoord.xy + vec2(1.0 / viewportWidth, 0.0), projectedCoord.z), uInvProjection);
+    return max(distance(position, adjacentPosition) * 0.1, 0.001);
 }
 
 vec2 binarySearch(inout vec3 dir, inout vec3 hitPos) {
@@ -156,7 +170,7 @@ vec2 binarySearch(inout vec3 dir, inout vec3 hitPos) {
         }
     }
 
-    coords = viewSpaceToScreenSpace(hitPos);
+    coords = clampToBounds(viewSpaceToScreenSpace(hitPos));
 
     return coords;
 }
@@ -169,33 +183,37 @@ vec2 rayMarch(in vec3 dir, in float thickness, inout vec3 hitPos, out bool misse
     float rayHitDepthDifference;
     vec2 coords;
 
-    float begin = float(dFirstStepSize);
+    float begin = getRayOffset(hitPos);
     dir *= begin;
     missed = false;
     float gf = calculateGrowthFactor(begin, uRayDistance, float(dSteps));
 
     for (int i = 1; i < dSteps; i++) {
         hitPos += dir;
+        float stepZ = abs(dir.z);
         dir *= gf;
 
-        coords = viewSpaceToScreenSpace(hitPos);
+        coords = clampToBounds(viewSpaceToScreenSpace(hitPos));
         float depth = getDepth(coords);
         float z = getViewZ(depth);
         rayHitDepthDifference = z - hitPos.z;
 
-        if (thickness == 0.0) {
-            #ifdef dThicknessMode_auto
-                thickness = max(uMinThickness, (getViewZ(getThickness(coords)) - z) * uThicknessFactor * texture2D(tColor, coords).a);
-            #else
-                thickness = uThickness;
-            #endif
-        }
+        if (rayHitDepthDifference >= 0.0) {
+            float t = thickness;
+            if (t == 0.0) {
+                #ifdef dThicknessMode_auto
+                    t = max(uMinThickness, (z - getViewZ(getThickness(coords))) * uThicknessFactor * texture2D(tColor, coords).a);
+                #else
+                    t = uThickness;
+                #endif
+            }
 
-        if (rayHitDepthDifference >= 0.0 && rayHitDepthDifference < thickness) {
-            if (dRefineSteps == 0) {
-                return coords;
-            } else {
-                return binarySearch(dir, hitPos);
+            if (rayHitDepthDifference < max(t, stepZ)) {
+                if (dRefineSteps == 0) {
+                    return coords;
+                } else {
+                    return binarySearch(dir, hitPos);
+                }
             }
         }
     }
@@ -252,19 +270,29 @@ vec3 colorForRay(in vec3 startRayPos, in vec3 startRayDir, inout StateType rngSt
             // shadow
             #ifdef dShadowEnable
                 #if dLightCount != 0
-                    vec3 directLight = vec3(uAmbientColor);
-                    #pragma unroll_loop_start
+                    // attenuate by the fraction of unoccluded irradiance, weighting each
+                    // light by its actual contribution so back-facing lights don't darken
+                    vec3 directLight = uAmbientColor;
+                    vec3 fullLight = uAmbientColor;
+                    vec3 irradiance;
+                    float ndotl;
                     bool missed;
                     vec3 hitPos;
+                    #pragma unroll_loop_start
                     for (int i = 0; i < dLightCount; ++i) {
-                        missed = false;
-                        hitPos = viewPos + hitInfo.normal * RayPosNormalNudge;
-                        hitPos += -uLightDirection[i] * (randomFloat(rngState));
-                        rayMarch(-uLightDirection[i] + randomUnitVector(rngState) * uShadowSoftness, uShadowThickness, hitPos, missed);
-                        if (missed) directLight += uLightColor[i];
+                        ndotl = saturate(dot(hitInfo.normal, -uLightDirection[i]));
+                        irradiance = ndotl * uLightColor[i];
+                        fullLight += irradiance;
+                        if (ndotl > 0.0) {
+                            missed = false;
+                            hitPos = viewPos + hitInfo.normal * RayPosNormalNudge;
+                            hitPos += -uLightDirection[i] * (randomFloat(rngState));
+                            rayMarch(-uLightDirection[i] + randomUnitVector(rngState) * uShadowSoftness, uShadowThickness, hitPos, missed);
+                            if (missed) directLight += irradiance;
+                        }
                     }
                     #pragma unroll_loop_end
-                    hitInfo.color *= directLight / uLightStrength;
+                    hitInfo.color *= directLight / max(fullLight, vec3(0.0001));
                 #endif
             #endif
 
@@ -278,28 +306,19 @@ vec3 colorForRay(in vec3 startRayPos, in vec3 startRayDir, inout StateType rngSt
 
         // if the ray missed, we are done
         if (hitInfo.missed) {
-            vec3 accIrradiance = vec3(1.0);
-            #ifdef dGlow
-                if (bounceIndex > 1) {
-                    accIrradiance = uLightStrength;
-                }
-            #else
-                if (bounceIndex > 1) {
-                    accIrradiance = uAmbientColor;
-                    #if dLightCount != 0
-                        #pragma unroll_loop_start
-                        float dotNL;
-                        vec3 irradiance;
-                        for (int i = 0; i < dLightCount; ++i) {
-                            dotNL = saturate(dot(prevHitInfo.normal, -uLightDirection[i]));
-                            irradiance = dotNL * uLightColor[i];
-                            accIrradiance += irradiance;
-                        }
-                        #pragma unroll_loop_end
-                    #endif
-                }
-            #endif
-            ret += prevHitInfo.color * accIrradiance * throughput;
+            vec3 escapeColor = prevHitInfo.color;
+            if (bounceIndex > 1) {
+                vec3 accIrradiance = uAmbientColor;
+                #if dLightCount != 0
+                    #pragma unroll_loop_start
+                    for (int i = 0; i < dLightCount; ++i) {
+                        accIrradiance += saturate(dot(prevHitInfo.normal, -uLightDirection[i])) * uLightColor[i];
+                    }
+                    #pragma unroll_loop_end
+                #endif
+                escapeColor = min(prevHitInfo.color * accIrradiance, 0.99) * uExposure;
+            }
+            ret += escapeColor * throughput;
             break;
         }
 

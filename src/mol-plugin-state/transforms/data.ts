@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2018-2024 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ * Copyright (c) 2018-2026 mol* contributors, licensed under MIT, See LICENSE file for more info.
  *
  * @author David Sehnal <david.sehnal@gmail.com>
  * @author Alexander Rose <alexander.rose@weirdbyte.de>
@@ -10,7 +10,10 @@ import * as CCP4 from '../../mol-io/reader/ccp4/parser';
 import { CIF } from '../../mol-io/reader/cif';
 import * as DSN6 from '../../mol-io/reader/dsn6/parser';
 import * as PLY from '../../mol-io/reader/ply/parser';
+import * as OBJ from '../../mol-io/reader/obj/parser';
+import * as VTP from '../../mol-io/reader/vtp/parser';
 import { parsePsf } from '../../mol-io/reader/psf/parser';
+import { parseMtz } from '../../mol-io/reader/mtz/parser';
 import { PluginContext } from '../../mol-plugin/context';
 import { StateObject, StateTransformer } from '../../mol-state';
 import { Task } from '../../mol-task';
@@ -27,6 +30,10 @@ import { parseTop } from '../../mol-io/reader/top/parser';
 import { ungzip } from '../../mol-util/zip/zip';
 import { StringLike } from '../../mol-io/common/string-like';
 import { utf8ReadLong } from '../../mol-io/common/utf8';
+import { parseDynamoTbl } from '../../mol-io/reader/dynamo/tbl';
+import { parseCryoEtDataPortalNdjson } from '../../mol-io/reader/cryoet/ndjson';
+import { parseArtiatomiEm } from '../../mol-io/reader/artiatomi/em';
+import { parseSimularium } from '../../mol-io/reader/simularium/parser';
 
 
 export { Download };
@@ -41,9 +48,16 @@ export { ParsePsf };
 export { ParsePrmtop };
 export { ParseTop };
 export { ParsePly };
+export { ParseObj };
+export { ParseVtp };
 export { ParseCcp4 };
 export { ParseDsn6 };
+export { ParseMtz };
 export { ParseDx };
+export { ParseDynamoTbl };
+export { ParseCryoEtDataPortalNdjson };
+export { ParseArtiatomiEm };
+export { ParseSimularium };
 export { ImportString };
 export { ImportJson };
 export { ParseJson };
@@ -390,8 +404,8 @@ const ParseTop = PluginStateTransform.BuiltIn({
 type ParsePly = typeof ParsePly
 const ParsePly = PluginStateTransform.BuiltIn({
     name: 'parse-ply',
-    display: { name: 'Parse PLY', description: 'Parse PLY from String data' },
-    from: [SO.Data.String],
+    display: { name: 'Parse PLY', description: 'Parse PLY from String or Binary data' },
+    from: [SO.Data.String, SO.Data.Binary],
     to: SO.Format.Ply
 })({
     apply({ a }) {
@@ -399,6 +413,102 @@ const ParsePly = PluginStateTransform.BuiltIn({
             const parsed = await PLY.parsePly(a.data).runInContext(ctx);
             if (parsed.isError) throw new Error(parsed.message);
             return new SO.Format.Ply(parsed.result, { label: parsed.result.comments[0] || 'PLY Data' });
+        });
+    }
+});
+
+type ParseObj = typeof ParseObj
+const ParseObj = PluginStateTransform.BuiltIn({
+    name: 'parse-obj',
+    display: { name: 'Parse OBJ', description: 'Parse OBJ from String data' },
+    from: [SO.Data.String],
+    to: SO.Format.Obj
+})({
+    apply({ a }) {
+        return Task.create('Parse OBJ', async ctx => {
+            const parsed = await OBJ.parseObj(a.data).runInContext(ctx);
+            if (parsed.isError) throw new Error(parsed.message);
+            return new SO.Format.Obj(parsed.result, { label: 'OBJ Data' });
+        });
+    }
+});
+
+type ParseVtp = typeof ParseVtp
+const ParseVtp = PluginStateTransform.BuiltIn({
+    name: 'parse-vtp',
+    display: { name: 'Parse VTP', description: 'Parse VTP (VTK PolyData) from Binary data' },
+    from: [SO.Data.Binary],
+    to: SO.Format.Vtp
+})({
+    apply({ a }) {
+        return Task.create('Parse VTP', async ctx => {
+            const parsed = await VTP.parseVtp(a.data).runInContext(ctx);
+            if (parsed.isError) throw new Error(parsed.message);
+            return new SO.Format.Vtp(parsed.result, { label: 'VTP Data' });
+        });
+    }
+});
+
+type ParseDynamoTbl = typeof ParseDynamoTbl
+const ParseDynamoTbl = PluginStateTransform.BuiltIn({
+    name: 'parse-dynamo-tbl',
+    display: { name: 'Parse Dynamo TBL', description: 'Parse Dynamo TBL from String data' },
+    from: [SO.Data.String],
+    to: SO.Format.DynamoTbl
+})({
+    apply({ a }) {
+        return Task.create('Parse Dynamo TBL', async ctx => {
+            const parsed = await parseDynamoTbl(a.data).runInContext(ctx);
+            if (parsed.isError) throw new Error(parsed.message);
+            return new SO.Format.DynamoTbl(parsed.result, { label: a.label || 'Dynamo TBL' });
+        });
+    }
+});
+
+type ParseCryoEtDataPortalNdjson = typeof ParseCryoEtDataPortalNdjson
+const ParseCryoEtDataPortalNdjson = PluginStateTransform.BuiltIn({
+    name: 'parse-cryoet-data-portal-ndjson',
+    display: { name: 'Parse CryoET NDJSON', description: 'Parse CryoET Data Portal NDJSON from String data' },
+    from: [SO.Data.String],
+    to: SO.Format.CryoEtDataPortalNdjson
+})({
+    apply({ a }) {
+        return Task.create('Parse CryoET NDJSON', async ctx => {
+            const parsed = await parseCryoEtDataPortalNdjson(a.data).runInContext(ctx);
+            if (parsed.isError) throw new Error(parsed.message);
+            return new SO.Format.CryoEtDataPortalNdjson(parsed.result, { label: a.label || 'CryoET NDJSON' });
+                    });
+    }
+});
+
+type ParseArtiatomiEm = typeof ParseArtiatomiEm
+const ParseArtiatomiEm = PluginStateTransform.BuiltIn({
+    name: 'parse-artiatomi-em',
+    display: { name: 'Parse Artiatomi EM', description: 'Parse Artiatomi EM motivelist from Binary data' },
+    from: [SO.Data.Binary],
+    to: SO.Format.ArtiatomiEm
+})({
+    apply({ a }) {
+        return Task.create('Parse Artiatomi EM', async () => {
+            const parsed = await parseArtiatomiEm(a.data).run();
+            if (parsed.isError) throw new Error(parsed.message);
+            return new SO.Format.ArtiatomiEm(parsed.result, { label: a.label || 'Artiatomi EM' });
+        });
+    }
+});
+
+type ParseSimularium = typeof ParseSimularium
+const ParseSimularium = PluginStateTransform.BuiltIn({
+    name: 'parse-simularium',
+    display: { name: 'Parse Simularium', description: 'Parse a Simularium trajectory (JSON or binary) from Binary data' },
+    from: [SO.Data.Binary],
+    to: SO.Format.Simularium
+})({
+    apply({ a }) {
+        return Task.create('Parse Simularium', async ctx => {
+            const parsed = await parseSimularium(a.data).runInContext(ctx);
+            if (parsed.isError) throw new Error(parsed.message);
+            return new SO.Format.Simularium(parsed.result, { label: a.label || 'Simularium' });
         });
     }
 });
@@ -431,6 +541,22 @@ const ParseDsn6 = PluginStateTransform.BuiltIn({
             const parsed = await DSN6.parse(a.data, a.label).runInContext(ctx);
             if (parsed.isError) throw new Error(parsed.message);
             return new SO.Format.Dsn6(parsed.result);
+        });
+    }
+});
+
+type ParseMtz = typeof ParseMtz
+const ParseMtz = PluginStateTransform.BuiltIn({
+    name: 'parse-mtz',
+    display: { name: 'Parse MTZ', description: 'Parse CCP4 MTZ reflection file from Binary data' },
+    from: [SO.Data.Binary],
+    to: SO.Format.Mtz
+})({
+    apply({ a }) {
+        return Task.create('Parse MTZ', async ctx => {
+            const parsed = await parseMtz(a.data, a.label).runInContext(ctx);
+            if (parsed.isError) throw new Error(parsed.message);
+            return new SO.Format.Mtz(parsed.result);
         });
     }
 });

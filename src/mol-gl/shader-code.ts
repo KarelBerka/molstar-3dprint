@@ -49,6 +49,7 @@ import { apply_fog } from './shader/chunks/apply-fog.glsl';
 import { apply_interior_color } from './shader/chunks/apply-interior-color.glsl';
 import { apply_light_color } from './shader/chunks/apply-light-color.glsl';
 import { apply_marker_color } from './shader/chunks/apply-marker-color.glsl';
+import { apply_marking } from './shader/chunks/apply-marking.glsl';
 import { assign_clipping_varying } from './shader/chunks/assign-clipping-varying.glsl';
 import { assign_color_varying } from './shader/chunks/assign-color-varying.glsl';
 import { assign_group } from './shader/chunks/assign-group.glsl';
@@ -85,6 +86,7 @@ const ShaderChunks: { [k: string]: string } = {
     apply_interior_color,
     apply_light_color,
     apply_marker_color,
+    apply_marking,
     assign_clipping_varying,
     assign_color_varying,
     assign_group,
@@ -173,17 +175,16 @@ function ignoreDefine(name: string, variant: string, defines: ShaderDefines): bo
         }
     } else {
         const ignore = [
-            'dColorType', 'dUsePalette',
-            'dOverpaintType', 'dOverpaint',
             'dSubstanceType', 'dSubstance',
             'dColorMarker', 'dCelShaded',
             'dLightCount',
         ];
-        if (variant !== 'depth' && !variant.startsWith('pick')) {
+        if (variant !== 'depth' && variant !== 'marking' && !variant.startsWith('pick')) {
             ignore.push('dXrayShaded');
         }
         if (variant !== 'emissive') {
-            ignore.push('dEmissiveType', 'dEmissive');
+            // emissive bloom seeds from the object's color, so keep the color/overpaint/emissive defines for it
+            ignore.push('dColorType', 'dUsePalette', 'dOverpaintType', 'dOverpaint', 'dEmissiveType', 'dEmissive');
         }
         return ignore.includes(name);
     }
@@ -217,7 +218,7 @@ export const LinesShaderCode = ShaderCode('lines', lines_vert, lines_frag, { dra
 
 import { mesh_vert } from './shader/mesh.vert';
 import { mesh_frag } from './shader/mesh.frag';
-export const MeshShaderCode = ShaderCode('mesh', mesh_vert, mesh_frag, { drawBuffers: 'optional' }, {}, ignoreDefine);
+export const MeshShaderCode = ShaderCode('mesh', mesh_vert, mesh_frag, { fragDepth: 'optional', drawBuffers: 'optional' }, {}, ignoreDefine);
 
 import { directVolume_vert } from './shader/direct-volume.vert';
 import { directVolume_frag } from './shader/direct-volume.frag';

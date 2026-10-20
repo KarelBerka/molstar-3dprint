@@ -18,6 +18,9 @@ tsconfig.commonjs.tsbuildinfo
 
 .DS_Store
 tmp/
+coverage/
 
 dev.pem
 dev-key.pem
+
+data/sym/syminfo.lib
