@@ -109,7 +109,6 @@ export class Viewer {
     loadPdb(pdb: string, options?: loaders.LoadStructureOptions) {
         return loaders.loadPdb(this.plugin, pdb, options);
     }
-    }
 
     /**
      * @deprecated Scheduled for removal in v5. Use {@link loadPdbIhm | loadPdbIhm(pdbIhm: string)} instead.
