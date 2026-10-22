@@ -253,7 +253,7 @@ def Mesh "mesh${this.meshes.length}"
     return new Blob([usdz], { type: 'model/vnd.usdz+zip' });
   }
 
-  constructor(boundingBox: Box3D, radius: number) {
+  constructor(boundingBox: Box3D, radius: number, scale?: number) {
     super();
     const t = Mat4();
     // scale the model so that it fits within 1 meter
@@ -268,6 +268,9 @@ def Mesh "mesh${this.meshes.length}"
         -(boundingBox.min[2] + boundingBox.max[2]) / 2,
       ),
     );
+    if (typeof scale === 'number' && scale > 0) {
+      Mat4.scale(t, t, Vec3.create(scale, scale, scale));
+    }
     this.centerTransform = t;
   }
 }

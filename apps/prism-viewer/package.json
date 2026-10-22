@@ -22,6 +22,7 @@
     "dev": "node ../../scripts/esbuild/app.mjs apps/prism-viewer --dev"
   },
   "dependencies": {
+    "@molstar/3dprint-export-extension": "workspace:*",
     "@molstar/anvil-extension": "workspace:*",
     "@molstar/assembly-symmetry-extension": "workspace:*",
     "@molstar/backgrounds-extension": "workspace:*",

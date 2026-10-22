@@ -95,6 +95,9 @@
       "path": "./examples/volume-tools"
     },
     {
+      "path": "./extensions/3dprint-export"
+    },
+    {
       "path": "./extensions/alpha-orbitals"
     },
     {

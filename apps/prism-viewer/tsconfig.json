@@ -46,6 +46,9 @@
       "path": "../../extensions/kinemage"
     },
     {
+      "path": "../../extensions/3dprint-export"
+    },
+    {
       "path": "../../extensions/geo-export"
     },
     {

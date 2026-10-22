@@ -193,6 +193,12 @@
       "private": true
     },
     {
+      "name": "@molstar/3dprint-export-extension",
+      "path": "extensions/3dprint-export",
+      "kind": "extension",
+      "private": false
+    },
+    {
       "name": "@molstar/alpha-orbitals-extension",
       "path": "extensions/alpha-orbitals",
       "kind": "extension",

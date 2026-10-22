@@ -435,11 +435,14 @@ export class GlbExporter extends MeshExporter<GlbData> {
     return new Blob([(await this.getData()).glb], { type: 'model/gltf-binary' });
   }
 
-  constructor(boundingBox: Box3D) {
+  constructor(boundingBox: Box3D, scale?: number) {
     super();
     const tmpV = Vec3();
     Vec3.add(tmpV, boundingBox.min, boundingBox.max);
     Vec3.scale(tmpV, tmpV, -0.5);
     this.centerTransform = Mat4.fromTranslation(Mat4(), tmpV);
+    if (typeof scale === 'number' && scale > 0) {
+      Mat4.scale(this.centerTransform, this.centerTransform, Vec3.create(scale, scale, scale));
+    }
   }
 }

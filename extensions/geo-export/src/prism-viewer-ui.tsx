@@ -6,6 +6,7 @@
  * Developed in collaboration with Anyfold <https://anyfold.ai/>
  *
  * @author David Sehnal <david.sehnal@gmail.com>
+ * @author Karel Berka <karel.berka@upol.cz>
  */
 
 import { ActionFooter, domView, observableState, ParamsForm } from '@molstar/prism-ui';
@@ -14,10 +15,13 @@ import type { ViewerExtensionUI, ViewerUIContext } from '@molstar/prism-viewer/s
 import { downloadBlob } from '@molstar/prism-viewer/ui/download';
 import { GeometryExportParams, SectionId } from './prism-viewer.js';
 
-// The Geometry section of the Export card (parity.md §6, the mock's look): the format, and Download, which asks
+// The Geometry section of the Export card (parity.md §6, the mock's look): the format, scale, and Download, which asks
 // `geo-export.export` for the file and saves it through the page. It acts only through the person's API.
 
-const FormParams = { format: GeometryExportParams.format };
+const FormParams = {
+  format: GeometryExportParams.format,
+  scale: GeometryExportParams.scale,
+};
 
 export function geoExportUI(ctx: ViewerUIContext): ViewerExtensionUI {
   return {
@@ -39,7 +43,15 @@ export function geoExportUI(ctx: ViewerUIContext): ViewerExtensionUI {
             try {
               // The run path says how it went (a warning on failure, the result when it worked).
               const r = await op(form.values.value);
-              if (r.ok && r.value) downloadBlob(r.value.blob, r.value.filename);
+              if (r.ok && r.value) {
+                downloadBlob(r.value.blob, r.value.filename);
+                if (r.value.additionalFiles) {
+                  for (let fi = 0; fi < r.value.additionalFiles.length; fi++) {
+                    const f = r.value.additionalFiles[fi];
+                    setTimeout(() => downloadBlob(f.blob, f.filename), (fi + 1) * 200);
+                  }
+                }
+              }
             } finally {
               busy.set(false);
             }
