@@ -27,7 +27,7 @@ export function threeDPrintUI(ctx: ViewerUIContext): ViewerExtensionUI {
           const busy = observableState(false);
 
           const applyPreset = async (preset: 'spacefill' | 'ball-and-stick' | 'cartoon' | 'surface') => {
-            const op = ctx.api['3dprint']?.applyPreset;
+            const op = ctx.api['print3d']?.applyPreset;
             if (busy.value || !op) return;
             busy.set(true);
             try {
@@ -38,7 +38,7 @@ export function threeDPrintUI(ctx: ViewerUIContext): ViewerExtensionUI {
           };
 
           const generate = async () => {
-            const op = ctx.api['3dprint']?.generate;
+            const op = ctx.api['print3d']?.generate;
             if (busy.value || !op) return;
             busy.set(true);
             try {
@@ -49,7 +49,7 @@ export function threeDPrintUI(ctx: ViewerUIContext): ViewerExtensionUI {
           };
 
           const clear = async () => {
-            const op = ctx.api['3dprint']?.clear;
+            const op = ctx.api['print3d']?.clear;
             if (busy.value || !op) return;
             busy.set(true);
             try {

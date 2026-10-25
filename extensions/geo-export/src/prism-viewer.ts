@@ -116,10 +116,10 @@ export class GeoExportApi extends ApiArea {
 
       const state = ctx.plugin.state.data;
       const cells = Array.from(state.cells.values());
-      const strutsCell = cells.find((c) => c.transform?.transformer?.id === '3dprint-struts.struts-from-structure');
-      const baseCell = cells.find((c) => c.transform?.transformer?.id === '3dprint-struts.stand-base-from-structure');
+      const strutsCell = cells.find((c) => c.transform?.transformer?.id?.includes('struts-from-structure'));
+      const baseCell = cells.find((c) => c.transform?.transformer?.id?.includes('stand-base-from-structure'));
       const pillarsCell = cells.find(
-        (c) => c.transform?.transformer?.id === '3dprint-struts.stand-pillars-from-structure',
+        (c) => c.transform?.transformer?.id?.includes('stand-pillars-from-structure'),
       );
       const strutsParams = strutsCell?.transform?.params as any;
       const isDetachable = strutsParams?.showStand && strutsParams?.standPillarsDetachable;

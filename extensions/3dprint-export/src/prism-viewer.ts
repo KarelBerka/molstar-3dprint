@@ -15,17 +15,17 @@ import { StrutsParams, StrutsFromStructure, StandBaseFromStructure, StandPillars
 
 declare module '@molstar/prism-viewer/api' {
   interface ExtensionApis {
-    '3dprint': ThreeDPrintApi;
+    'print3d': ThreeDPrintApi;
   }
 }
 
-export const SectionId = '3dprint.section.planning';
+export const SectionId = 'print3d.section.planning';
 
 export class ThreeDPrintApi extends ApiArea {
-  readonly id = '3dprint';
+  readonly id = 'print3d';
 
   readonly generate = this.operation({
-    id: '3dprint.generate',
+    id: 'print3d.generate',
     title: 'Generate 3D-Print supports',
     params: StrutsParams,
     modules: ['canvas'],
@@ -77,7 +77,7 @@ export class ThreeDPrintApi extends ApiArea {
   });
 
   readonly clear = this.operation({
-    id: '3dprint.clear',
+    id: 'print3d.clear',
     title: 'Clear 3D-Print supports',
     params: {},
     modules: ['canvas'],
@@ -98,7 +98,7 @@ export class ThreeDPrintApi extends ApiArea {
   });
 
   readonly applyPreset = this.operation({
-    id: '3dprint.preset',
+    id: 'print3d.preset',
     title: 'Apply 3D-Print preset',
     params: {
       preset: PD.Select('spacefill', [
@@ -123,12 +123,12 @@ export class ThreeDPrintApi extends ApiArea {
 }
 
 export const ThreeDPrintSkill: ViewerSkill = {
-  id: '3dprint-planning',
+  id: 'print3d-planning',
   title: '3D-Print Planning',
   summary:
     'plans and generates internal support struts, stands with embossed text, and durable presets for 3D printing',
   guidance: [
-    'Skill 3dprint-planning: prepares macromolecular structures for FDM/SLA 3D printing.',
+    'Skill print3d-planning: prepares macromolecular structures for FDM/SLA 3D printing.',
     '- generate adds internal support struts, a sturdy pedestal stand, and vertical pillars.',
     '- stand text can emboss PDB IDs or molecule names along the base rim.',
     '- applyPreset sets durable thick representations that resist delamination and breakage.',
@@ -136,23 +136,23 @@ export const ThreeDPrintSkill: ViewerSkill = {
   tools: [
     {
       id: 'generate_supports',
-      operation: '3dprint.generate',
+      operation: 'print3d.generate',
       description: 'Generates support struts and pedestal stand for 3D printing.',
     },
     {
       id: 'clear_supports',
-      operation: '3dprint.clear',
+      operation: 'print3d.clear',
       description: 'Removes 3D printing support struts and pedestal stand.',
     },
   ],
 };
 
 export const ThreeDPrintExtension: ViewerExtension = {
-  id: '3dprint-export',
+  id: 'print3d-export',
   title: '3D-Print Planning',
-  api: { '3dprint': (ctx) => new ThreeDPrintApi(ctx) },
+  api: { 'print3d': (ctx) => new ThreeDPrintApi(ctx) },
   commands: (api) => {
-    const x = api['3dprint'];
+    const x = api['print3d'];
     if (!x) return [];
     return [
       {
@@ -165,9 +165,9 @@ export const ThreeDPrintExtension: ViewerExtension = {
           view: { title: 'Export › 3D-Print Planning', card: 'core.overlay.export', section: SectionId },
         }),
         async run(args) {
-          const r = await api['3dprint']!.generate(args as never);
+          const r = await api['print3d']!.generate(args as never);
           if (!r.ok) throw new Error(r.hint ? `${r.message} ${r.hint}` : r.message);
-          return { message: r.did, ops: `3dprint.generate(${JSON.stringify(args)})` };
+          return { message: r.did, ops: `print3d.generate(${JSON.stringify(args)})` };
         },
       },
     ];
