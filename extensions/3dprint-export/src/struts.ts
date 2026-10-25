@@ -69,6 +69,7 @@ export const StrutsParams = {
     { description: 'Detachment clearance gap (Å, negative to overlap)' },
   ),
   standText: PD.Text('', { description: 'Text to emboss/raise on the stand' }),
+  standTextColor: PD.Color(ColorNames.gold, { description: 'Color of the embossed stand text' }),
   standTextFont: PD.Select(
     '3x5',
     [
@@ -518,12 +519,14 @@ function getStrutsShape(data: StrutsData): Shape<Mesh> {
 }
 
 function getStandBaseShape(data: StrutsData): Shape<Mesh> {
-  const color = data.props.standColor;
+  const baseColor = data.props.standColor;
+  const textColor = data.props.standTextColor ?? ColorNames.gold;
   const totalBoxes = data.textTransforms ? data.textTransforms.length : 0;
   const vertexCount = (data.standBase ? 256 : 0) + totalBoxes * 8;
   const triangleCount = (data.standBase ? 256 : 0) + totalBoxes * 12;
   const state = MeshBuilder.createState(vertexCount, triangleCount);
   if (data.standBase) {
+    state.currentGroup = 0;
     const baseProps = {
       radiusTop: data.standBase.radius,
       radiusBottom: data.standBase.radius,
@@ -533,7 +536,8 @@ function getStandBaseShape(data: StrutsData): Shape<Mesh> {
     };
     addCylinder(state, data.standBase.start, data.standBase.end, 1, baseProps);
   }
-  if (data.textTransforms) {
+  if (data.textTransforms && data.textTransforms.length > 0) {
+    state.currentGroup = 1;
     const box = Box();
     for (const mat of data.textTransforms) {
       MeshBuilder.addPrimitive(state, mat, box);
@@ -545,10 +549,10 @@ function getStandBaseShape(data: StrutsData): Shape<Mesh> {
     'Stand Base Plate',
     data,
     mesh,
-    () => color,
+    (groupId: number) => (groupId === 1 ? textColor : baseColor),
     () => 1,
-    () => 'Stand Base',
-    1,
+    (groupId: number) => (groupId === 1 ? 'Stand Text' : 'Stand Base'),
+    totalBoxes > 0 ? 2 : 1,
   );
 }
 
