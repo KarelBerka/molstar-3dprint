@@ -103,8 +103,6 @@ export class GeometryControls extends PluginComponent {
                     ...getRepCells(pillarsCell)
                 ];
 
-                const proteinReps = cells.filter(c => c.transform.transformer.id.endsWith('structure-representation-3d'));
-
                 const cleanName = strutsParams.standText && strutsParams.standText.trim()
                     ? strutsParams.standText.trim().replace(/[^a-z0-9_-]/gi, '_')
                     : filename;

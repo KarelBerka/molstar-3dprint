@@ -793,7 +793,7 @@ export const StandBaseFromStructure = StrutsFactory({
         const shapeProvider = {
             ...StrutsShapeProvider.fromStructure(a.data, params, plugin),
             label: 'Stand Base',
-            getShape: (_, d: StrutsData) => getStandBaseShape(d)
+            getShape: (_: any, d: StrutsData) => getStandBaseShape(d)
         };
         return new PluginStateObject.Shape.Provider(shapeProvider, {
             label: 'Stand Base Plate',
@@ -813,7 +813,7 @@ export const StandPillarsFromStructure = StrutsFactory({
         const shapeProvider = {
             ...StrutsShapeProvider.fromStructure(a.data, params, plugin),
             label: 'Stand Pillars',
-            getShape: (_, d: StrutsData) => getStandPillarsShape(d)
+            getShape: (_: any, d: StrutsData) => getStandPillarsShape(d)
         };
         const pCount = shapeProvider.data.standPillars ? shapeProvider.data.standPillars.length : 0;
         return new PluginStateObject.Shape.Provider(shapeProvider, {
