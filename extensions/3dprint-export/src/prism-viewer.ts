@@ -19,7 +19,7 @@ declare module '@molstar/prism-viewer/api' {
   }
 }
 
-export const SectionId = 'print3d.section.planning';
+export const SectionId = 'print3d-export.section.planning';
 
 export class ThreeDPrintApi extends ApiArea {
   readonly id = 'print3d';
