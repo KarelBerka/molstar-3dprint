@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <link rel="icon" href="./favicon.ico" type="image/x-icon" />
+    <title>Mol* Prism Viewer – 3DP-Mol*</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #eeece7;
+      }
+      #app {
+        position: absolute;
+        inset: 0;
+      }
+      .version-switcher-badge {
+        position: fixed;
+        top: 10px;
+        right: 60px;
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        background: rgba(22, 27, 34, 0.88);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 20px;
+        padding: 3px 4px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 11px;
+        user-select: none;
+      }
+      .version-switcher-badge a {
+        color: #8fa0b5;
+        text-decoration: none;
+        padding: 4px 10px;
+        border-radius: 14px;
+        transition: all 0.2s ease;
+        font-weight: 500;
+      }
+      .version-switcher-badge a:hover {
+        color: #ffffff;
+        background: rgba(255, 255, 255, 0.12);
+      }
+      .version-switcher-badge .current {
+        background: linear-gradient(135deg, #00c6ff, #0072ff);
+        color: #ffffff;
+        padding: 4px 10px;
+        border-radius: 14px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        box-shadow: 0 2px 8px rgba(0, 114, 255, 0.4);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="version-switcher-badge">
+      <a href="../" id="switch-to-classic" title="Switch to Classic v5 UI">← Classic (v5)</a>
+      <span class="current">PRISM (v6) ⚡</span>
+    </div>
+    <div id="app"></div>
+    <noscript>The Mol* viewer needs JavaScript.</noscript>
+    <script type="module" src="./index.js"></script>
+    <script>
+      (function() {
+        const link = document.getElementById('switch-to-classic');
+        if (!link) return;
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('pdb')) {
+          link.href = '../?pdb=' + encodeURIComponent(params.get('pdb'));
+        } else if (params.has('afdb')) {
+          link.href = '../?afdb=' + encodeURIComponent(params.get('afdb'));
+        }
+        link.addEventListener('click', function(e) {
+          try {
+            const viewer = window.molstar?.viewer;
+            const structs = viewer?.plugin?.managers?.structure?.hierarchy?.current?.structures;
+            if (structs && structs.length > 0) {
+              const entryId = structs[0].cell?.obj?.data?.entryId || structs[0].cell?.obj?.data?.models?.[0]?.entryId;
+              if (entryId) {
+                e.preventDefault();
+                window.location.href = '../?pdb=' + encodeURIComponent(entryId.toLowerCase());
+              }
+            }
+          } catch (err) {}
+        });
+      })();
+    </script>
+    <!-- __MOLSTAR_ANALYTICS__ -->
+  </body>
+</html>

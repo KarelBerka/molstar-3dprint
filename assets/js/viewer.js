@@ -347,6 +347,7 @@ const Viewer = molstar.Viewer;
 
   // Load PDB structure
   async function loadPdb(id) {
+    updatePrismLink('pdb', id);
     id = id.trim().toLowerCase();
     const isStandard = /^[0-9a-z]{4}$/.test(id);
     const isExtended = /^pdb_[0-9a-z]{8}$/.test(id);
@@ -440,6 +441,7 @@ const Viewer = molstar.Viewer;
 
   // Load AFDB structure
   async function loadAfdb(uniprot) {
+    updatePrismLink('afdb', uniprot);
     uniprot = uniprot.trim().toUpperCase();
     if (!uniprot) return;
     setLoadingState(true);
@@ -851,6 +853,46 @@ const Viewer = molstar.Viewer;
   toggleNegCheckbox.addEventListener('change', () => {
     updateOrbitalVisibility();
   });
+
+
+  // Version Switcher & URL Query Parameters Sync
+  const switchToPrism = document.getElementById('switch-to-prism');
+
+  function updatePrismLink(type, id) {
+    if (!switchToPrism || !id) return;
+    switchToPrism.href = './prism/?' + encodeURIComponent(type) + '=' + encodeURIComponent(id.toLowerCase());
+  }
+
+  if (switchToPrism) {
+    switchToPrism.addEventListener('click', (e) => {
+      try {
+        const structs = viewer?.plugin?.managers?.structure?.hierarchy?.current?.structures;
+        if (structs && structs.length > 0) {
+          const entryId = structs[0].cell?.obj?.data?.entryId || structs[0].cell?.obj?.data?.models?.[0]?.entryId;
+          if (entryId) {
+            e.preventDefault();
+            window.location.href = './prism/?pdb=' + encodeURIComponent(entryId.toLowerCase());
+          }
+        }
+      } catch (err) {}
+    });
+  }
+
+  // Check URL query parameters on initial page load
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('pdb')) {
+    const id = urlParams.get('pdb');
+    dbSelect.value = 'pdb';
+    dbInput.value = id;
+    updatePrismLink('pdb', id);
+    loadPdb(id);
+  } else if (urlParams.has('afdb')) {
+    const id = urlParams.get('afdb');
+    dbSelect.value = 'afdb';
+    dbInput.value = id;
+    updatePrismLink('afdb', id);
+    loadAfdb(id);
+  }
 
   // Sidebar Collapse/Expand Logic
   const sidebar = document.querySelector('.sidebar');

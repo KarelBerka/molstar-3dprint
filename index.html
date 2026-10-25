@@ -28,7 +28,13 @@
   <div class="sidebar">
     <button class="sidebar-toggle" id="sidebar-toggle" title="Toggle Sidebar">❮</button>
     <header class="header">
-      <h1 class="title">3DP-Mol*</h1>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+        <h1 class="title" style="margin-bottom: 0;">3DP-Mol*</h1>
+        <div class="version-toggle-container">
+          <span class="version-pill active" title="Current: Classic v5 UI">Classic (v5)</span>
+          <a href="./prism/" id="switch-to-prism" class="version-pill link" title="Switch to Mol* v6 PRISM UI">PRISM (v6) ⚡</a>
+        </div>
+      </div>
       <p class="subtitle">Upload molecular files, calculate planning support struts, and export 3D-printable meshes.</p>
     </header>
 

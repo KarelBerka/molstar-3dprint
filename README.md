@@ -4,12 +4,13 @@
 
 This repository is a customized fork of **[Mol\*](https://github.com/molstar/molstar)**, integrating the automated printing planning algorithms originally developed in the JSmol/Jmol-based **[3DP-Jmol](https://github.com/mariusmihasan/3DP-Jmol)** tool.
 
-🚀 **[Live Demo Page](https://karelberka.github.io/molstar-3dprint/)**
+🚀 **[Live Demo (Classic v5)](https://karelberka.github.io/molstar-3dprint/)** | ⚡ **[Next-Gen PRISM (v6)](https://karelberka.github.io/molstar-3dprint/prism/)**
 
 ---
 
 ## Features
 
+- **Dual UI Support**: Toggle seamlessly between the classic full-featured web viewer and the modern next-generation Mol* v6 PRISM interface with state preservation.
 - **Dynamic Print Sizing**: Specify target sizes in millimeters or define a scale factor; both input fields are fully interactive and update one another in real time.
 - **Thick Presets**: One-click durable representations (Spacefill, Ball & Stick, Cartoon, and Surface) configured to generate print-stable meshes that resist delamination and breakage.
 - **Support Struts Engine**: Automatically calculates internal support struts for protein and nucleic acid backbones, as well as multi-point stabilization struts for small molecules/ligands.
@@ -55,7 +56,8 @@ The following modifications were made to the core [Mol\*](https://molstar.org) p
 ### 4. Direct Web Exporter Page Integration
 - Configured a split-screen webpage layout in `index.html` with a glassmorphism sidebar for files and downloads, leaving the remaining screen as a full-height viewport canvas. Included selectors for new database options and controls for molecular orbital isovalues and toggles.
 - Configured `assets/js/viewer.js` to initialize Mol* and enable direct STL, OBJ, and GLB geometry exports with correct physical scaling. Added autocomplete APIs and loading routines for PubChem, ChEMBL (via InChIKey lookup to PubChem 3D conformers), and PQR Gaussian Cube files (with volumetric isosurfaces).
-- Configured `.gitignore` to track the custom built `build/viewer/molstar.js` and `build/viewer/molstar.css` files, allowing GitHub Pages to serve them.
+- Added two-way version switcher between Classic (v5) and PRISM (v6) interfaces with automatic structure URL parameter synchronization.
+- Configured `.gitignore` to track the custom built `build/viewer/molstar.js` and `build/viewer/molstar.css` files, as well as the complete `prism/` distribution, allowing GitHub Pages to serve both.
 
 ---
 
