@@ -32,6 +32,7 @@ export const StrutsParams = {
     standPillarsDetachable: PD.Boolean(false, { description: 'Leave a small gap between pillars and molecule for easy detachment' }),
     standPillarGap: PD.Numeric(0.8, { min: -3.0, max: 3.0, step: 0.1 }, { description: 'Detachment clearance gap (Å, negative to overlap)' }),
     standText: PD.Text('', { description: 'Text to emboss/raise on the stand' }),
+    standTextColor: PD.Color(ColorNames.gold, { description: 'Color of the embossed stand text' }),
     standTextFont: PD.Select('3x5', [['3x5', '3x5 (Compact)'], ['5x7', '5x7 (Legible)']], { description: 'Pixel font size/style' }),
     standTextSize: PD.Numeric(0.8, { min: 0.2, max: 2.0, step: 0.1 }, { description: 'Text pixel size (Å)' }),
     standTextDepth: PD.Numeric(1.0, { min: -3.0, max: 3.0, step: 0.1 }, { description: 'Text protrusion height (Å, negative to engrave)' }),
@@ -450,16 +451,19 @@ function getStrutsShape(data: StrutsData): Shape<Mesh> {
 }
 
 function getStandBaseShape(data: StrutsData): Shape<Mesh> {
-    const color = data.props.standColor;
+    const baseColor = data.props.standColor;
+    const textColor = data.props.standTextColor ?? ColorNames.gold;
     let totalBoxes = data.textTransforms ? data.textTransforms.length : 0;
     const vertexCount = (data.standBase ? 256 : 0) + totalBoxes * 8;
     const triangleCount = (data.standBase ? 256 : 0) + totalBoxes * 12;
     const state = MeshBuilder.createState(vertexCount, triangleCount);
     if (data.standBase) {
+        state.currentGroup = 0;
         const baseProps = { radiusTop: data.standBase.radius, radiusBottom: data.standBase.radius, radialSegments: 64, topCap: true, bottomCap: true };
         addCylinder(state, data.standBase.start, data.standBase.end, 1, baseProps);
     }
-    if (data.textTransforms) {
+    if (data.textTransforms && data.textTransforms.length > 0) {
+        state.currentGroup = 1;
         const box = Box();
         for (const mat of data.textTransforms) {
             MeshBuilder.addPrimitive(state, mat, box);
@@ -467,7 +471,16 @@ function getStandBaseShape(data: StrutsData): Shape<Mesh> {
     }
     const mesh = MeshBuilder.getMesh(state);
     Mesh.computeNormals(mesh);
-    return Shape.create('Stand Base Plate', data, mesh, () => color, () => 1, () => 'Stand Base');
+    return Shape.create(
+        'Stand Base Plate',
+        data,
+        mesh,
+        (groupId: number) => (groupId === 1 ? textColor : baseColor),
+        () => 1,
+        (groupId: number) => (groupId === 1 ? 'Stand Text' : 'Stand Base'),
+        undefined,
+        totalBoxes > 0 ? 2 : 1
+    );
 }
 
 function getStandPillarsShape(data: StrutsData): Shape<Mesh> {
